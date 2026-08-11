@@ -530,13 +530,7 @@ function MusicPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-white/5 px-4 sm:px-6 py-3 sm:py-4 bg-background/40 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3 w-full md:w-auto">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-accent font-bold text-primary-foreground shadow-md shrink-0">
-              <Headphones className="h-5 w-5" />
-            </div>
-            <div className="flex flex-col leading-none">
-              <span className="font-display text-xl sm:text-3xl font-bold text-gradient-primary">Music & Focus</span>
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1">LifePulse Soundscape</span>
-            </div>
+            <h1 className="font-display text-xl sm:text-3xl font-semibold text-foreground">Music & Focus</h1>
           </div>
 
           <Button

@@ -42,20 +42,20 @@ function Dashboard() {
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
             {format(new Date(), "EEEE · MMMM d, yyyy")}
           </div>
-          <h1 className="mt-2 sm:mt-4 font-display text-xl sm:text-3xl lg:text-4xl font-semibold leading-tight text-gradient-primary">
+          <h1 className="mt-2 sm:mt-4 font-display text-xl sm:text-3xl lg:text-4xl font-semibold leading-tight text-foreground">
             Good {greeting()}.
           </h1>
-
         </div>
       </header>
 
       <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon, tint }) => (
-          <div key={label} className="glass-card relative overflow-hidden rounded-2xl p-5">
-            <div className={cn("pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br blur-2xl", tint)} />
-            <Icon className="h-4 w-4 text-primary" />
-            <p className="mt-3 font-display text-3xl font-semibold text-foreground">{value}</p>
-            <p className="mt-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+        {stats.map(({ label, value, icon: Icon }) => (
+          <div key={label} className="glass-card relative overflow-hidden rounded-2xl p-5 border border-white/5 bg-white/[0.02]">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-[0.14em] font-medium text-muted-foreground">{label}</p>
+              <Icon className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <p className="mt-2 font-display text-3xl font-semibold text-foreground">{value}</p>
           </div>
         ))}
       </div>
@@ -107,15 +107,12 @@ function Dashboard() {
 
       <section className="mt-12">
         <div className="mb-5 flex items-baseline justify-between">
-          <h2 className="flex items-center gap-2 font-display text-2xl text-foreground">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-primary/30 to-accent/20">
-              <StickyNote className="h-4 w-4 text-primary" />
-            </span>
+          <h2 className="font-display text-xl font-semibold text-foreground">
             {pinnedNotes.length > 0 ? "Pinned notes" : "Recent sticky notes"}
           </h2>
           <Link
             to="/sticky"
-            className="group inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="group inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Open board
             <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -163,27 +160,24 @@ function relDate(iso: string) {
 }
 function prioClass(p: string | null) {
   return p === "high"
-    ? "bg-destructive shadow-[0_0_8px_oklch(0.63_0.22_20/0.8)]"
+    ? "bg-destructive"
     : p === "medium"
-    ? "bg-sunbeam shadow-[0_0_8px_oklch(0.85_0.14_90/0.6)]"
+    ? "bg-sunbeam"
     : "bg-primary/60";
 }
 
 function Panel({
-  title, icon: Icon, to, children, accent,
-}: { title: string; icon: typeof StickyNote; to: string; children: React.ReactNode; accent: string }) {
+  title, icon: Icon, to, children,
+}: { title: string; icon: typeof StickyNote; to: string; children: React.ReactNode; accent?: string }) {
   return (
-    <section className="glass-card group relative overflow-hidden rounded-3xl p-6">
-      <div className={cn("pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-gradient-to-br blur-3xl opacity-70 transition-opacity group-hover:opacity-100", accent)} />
-      <div className="relative mb-5 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-foreground">
-          <span className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04]">
-            <Icon className="h-4 w-4 text-primary" />
-          </span>
+    <section className="glass-card group relative overflow-hidden rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
+      <div className="relative mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-display text-base font-semibold text-foreground">
+          <Icon className="h-4 w-4 text-muted-foreground" />
           {title}
         </h2>
         <Link to={to} className="text-xs text-muted-foreground transition hover:text-foreground">
-          All →
+          View all →
         </Link>
       </div>
       <div className="relative">{children}</div>

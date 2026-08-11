@@ -361,13 +361,7 @@ function ExpensesPage() {
       {/* Title Header */}
       <header className="mb-4 sm:mb-8 flex flex-wrap items-center justify-between gap-4 sm:gap-6">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-muted-foreground">
-            <Wallet className="h-3 w-3 text-primary" /> Money OS
-          </div>
-          <h1 className="mt-1.5 sm:mt-3 font-display text-xl sm:text-3xl text-gradient-primary">Expenses</h1>
-          <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-muted-foreground">
-            A simple, calm space to log and analyze your spending.
-          </p>
+          <h1 className="mt-1.5 sm:mt-3 font-display text-xl sm:text-3xl font-semibold text-foreground">Expenses</h1>
         </div>
 
         {/* Tab Controls */}
@@ -603,9 +597,7 @@ function ExpensesPage() {
           </div>
 
           {/* Monthly Budget Tracker */}
-          <div className="glass-card rounded-3xl p-6 relative overflow-hidden">
-            {/* Subtle background glow */}
-            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gradient-to-br from-primary/10 to-accent/10 blur-3xl" />
+          <div className="glass-card rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
             
             <div className="flex flex-wrap items-center justify-between gap-4 mb-6 relative z-10">
               <div>
@@ -1096,22 +1088,20 @@ function ExpensesPage() {
   );
 }
 
-function SummaryTile({
+function StatCard({
   label,
   value,
-  accent,
   big,
 }: {
   label: string;
   value: number;
-  accent: string;
+  accent?: string;
   big?: boolean;
 }) {
   return (
-    <div className="glass-card relative overflow-hidden rounded-2xl p-5">
-      <div className={cn("pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br blur-2xl", accent)} />
-      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className={cn("mt-2 font-display tabular-nums font-semibold", big ? "text-4xl text-gradient-primary" : "text-3xl")}>
+    <div className="glass-card relative overflow-hidden rounded-2xl p-5 border border-white/5 bg-white/[0.02]">
+      <p className="text-xs uppercase tracking-[0.14em] font-medium text-muted-foreground">{label}</p>
+      <p className={cn("mt-2 font-display tabular-nums font-semibold text-foreground", big ? "text-4xl" : "text-3xl")}>
         {value.toFixed(2)} {CURRENCY}
       </p>
     </div>

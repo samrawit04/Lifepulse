@@ -33,17 +33,15 @@ function Landing() {
     <div className="min-h-screen bg-cozy-grain">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-[0_10px_30px_-8px_oklch(0.78_0.14_160/0.7)]">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <span className="font-display text-xl font-semibold text-gradient-primary">LifePulse</span>
+          <img src="/logo.png" alt="LifePulse Logo" className="h-9 w-9 rounded-xl object-cover border border-white/10" />
+          <span className="font-display text-xl font-semibold text-foreground">LifePulse</span>
         </div>
         <div className="flex items-center gap-2">
           <Link to="/auth">
             <Button variant="ghost">Sign in</Button>
           </Link>
           <Link to="/auth" search={{ mode: "signup" }}>
-            <Button className="bg-gradient-to-r from-primary to-accent text-primary-foreground shadow-[0_10px_30px_-10px_oklch(0.78_0.14_160/0.8)] hover:opacity-95">
+            <Button className="bg-primary text-primary-foreground hover:opacity-95 font-medium">
               Get started
             </Button>
           </Link>
@@ -53,13 +51,11 @@ function Landing() {
       <main className="mx-auto max-w-6xl px-6 pb-24 pt-12">
         <section className="grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-center">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_oklch(0.78_0.14_160/0.9)]" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1 text-xs font-medium text-muted-foreground">
               Your all-in-one life dashboard
             </div>
-            <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.02] tracking-tight sm:text-6xl">
-              <span className="text-gradient-primary">Notes, tasks, budget & AI</span>
-              <span className="text-foreground"> — one calm place for all of it.</span>
+            <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl text-foreground">
+              Notes, tasks, budget & AI — one calm place for all of it.
             </h1>
             <p className="mt-6 max-w-xl text-lg text-muted-foreground">
               LifePulse brings your notes, tasks, calendar, expenses, music, and AI assistant together in one beautiful workspace.
@@ -68,7 +64,7 @@ function Landing() {
               <Link to="/auth" search={{ mode: "signup" }}>
                 <Button
                   size="lg"
-                  className="group bg-gradient-to-r from-primary to-accent text-primary-foreground shadow-[0_20px_50px_-15px_oklch(0.78_0.14_160/0.8)] hover:opacity-95"
+                  className="group bg-primary text-primary-foreground hover:opacity-95 font-medium"
                 >
                   Create your workspace
                   <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -87,7 +83,7 @@ function Landing() {
             <div className="pointer-events-none absolute -left-10 top-20 h-40 w-56 rotate-[-6deg] rounded-2xl bg-note-yellow p-4 shadow-note">
               <p className="text-xs font-semibold uppercase tracking-wider text-black/60">Idea</p>
               <p className="mt-2 font-display text-lg text-black/85">
-                Sunday brunch — invite  ruth & Jonas
+                Sunday brunch — invite ruth & Jonas
               </p>
             </div>
             <div className="pointer-events-none absolute right-4 top-8 h-36 w-52 rotate-[5deg] rounded-2xl bg-note-pink p-4 shadow-note">
@@ -105,10 +101,10 @@ function Landing() {
           </div>
         </section>
 
-        <section className="mt-28 grid gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
+        <section className="mt-24 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: StickyNote, label: "Sticky Notes", desc: "Colorful draggable notes, always in reach." },
-            { icon: NotebookText, label: "Notebooks", desc: "Rich pages with photos, audio, video & file attachments." },
+            { icon: NotebookText, label: "Notebooks", desc: "Rich pages with photos, audio, video & attachments." },
             { icon: CheckCircle2, label: "Tasks", desc: "Kanban board with priorities, due dates & folders." },
             { icon: CalendarDays, label: "Calendar", desc: "Plan events and see your week at a glance." },
             { icon: Wallet, label: "Expenses", desc: "Log spending, set budgets, track by category." },
@@ -116,13 +112,10 @@ function Landing() {
             { icon: Bot, label: "AI Assistant", desc: "Gemini-powered chat that knows your data." },
             { icon: Sparkles, label: "Smart Alerts", desc: "Auto-notified on overdue tasks & budget limits." },
           ].map(({ icon: Icon, label, desc }) => (
-            <div key={label} className="glass-card group relative overflow-hidden rounded-2xl p-6 transition-transform hover:-translate-y-1">
-              <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-primary/20 to-transparent blur-2xl" />
-              <div className="relative grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-primary/30 to-accent/20">
-                <Icon className="h-5 w-5 text-primary" strokeWidth={1.75} />
-              </div>
-              <h3 className="relative mt-4 font-display text-lg text-foreground">{label}</h3>
-              <p className="relative mt-1 text-sm text-muted-foreground">{desc}</p>
+            <div key={label} className="glass-card group relative overflow-hidden rounded-2xl p-5 border border-white/5 bg-white/[0.02] transition-transform hover:-translate-y-0.5">
+              <Icon className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={1.75} />
+              <h3 className="mt-3 font-display text-base font-semibold text-foreground">{label}</h3>
+              <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{desc}</p>
             </div>
           ))}
         </section>

@@ -75,10 +75,7 @@ function StickyBoard() {
     <div className="relative flex h-[calc(100dvh-48px)] lg:h-dvh flex-col p-3 sm:p-4 lg:p-6 overflow-hidden">
       <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/60 px-4 sm:px-6 py-3 backdrop-blur rounded-2xl mb-3">
         <div>
-          <h1 className="font-display text-xl sm:text-2xl lg:text-3xl text-gradient-primary">Sticky Board</h1>
-          <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-            Double-click or tap anywhere on the board to drop a note.
-          </p>
+          <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Sticky Board</h1>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground hidden sm:inline">{notes.length} notes</span>

@@ -166,19 +166,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-primary/15 to-transparent" />
-
         {/* Sidebar Top Header */}
-        <div className="relative flex h-16 items-center gap-2 px-4">
+        <div className="relative flex h-16 items-center gap-2.5 px-4">
           <img
             src="/logo.png"
             alt="LifePulse Logo"
-            className="h-9 w-9 rounded-2xl object-cover shadow-[0_10px_30px_-8px_oklch(0.78_0.14_160/0.7)] border border-white/10 shrink-0"
+            className="h-8 w-8 rounded-xl object-cover border border-white/10 shrink-0"
           />
-          <div className="flex flex-col leading-tight min-w-0">
-            <span className="font-display text-base font-semibold text-gradient-primary truncate">LifePulse</span>
-            <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground truncate">your home</span>
-          </div>
+          <span className="font-display text-base font-semibold text-foreground truncate">LifePulse</span>
 
           {/* Mode Switcher + Notifications + Hide Sidebar on Sidebar Top Header */}
           <div className="ml-auto flex items-center gap-1 shrink-0">
@@ -224,21 +219,18 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={to}
                 to={to}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+                  "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
                   active
-                    ? "bg-gradient-to-r from-primary/25 via-primary/10 to-transparent text-foreground shadow-[inset_0_1px_0_oklch(1_0_0/0.08)]"
+                    ? "bg-primary/10 text-foreground font-semibold"
                     : "text-sidebar-foreground/80 hover:bg-white/[0.04] hover:text-foreground",
                 )}
               >
-                {active && (
-                  <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-primary to-accent shadow-[0_0_12px_oklch(0.78_0.14_160/0.8)]" />
-                )}
                 <Icon
                   className={cn(
                     "h-4 w-4 transition-colors",
                     active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
                   )}
-                  strokeWidth={active ? 2.25 : 1.75}
+                  strokeWidth={active ? 2 : 1.75}
                 />
                 {label}
               </Link>
