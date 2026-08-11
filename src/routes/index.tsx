@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { apiClient } from "@/integrations/api/client";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, StickyNote, NotebookText, CheckCircle2, Sparkles, ArrowRight } from "lucide-react";
+import { CalendarDays, StickyNote, NotebookText, CheckCircle2, Sparkles, ArrowRight, Wallet, Music2, Bot } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -55,16 +55,14 @@ function Landing() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
               <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_oklch(0.78_0.14_160/0.9)]" />
-              A quiet home for your day
+              Your all-in-one life dashboard
             </div>
             <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.02] tracking-tight sm:text-6xl">
-              <span className="text-gradient-primary">Sticky notes, notebooks & calendar</span>
-              <span className="text-foreground"> — all under one soft light.</span>
+              <span className="text-gradient-primary">Notes, tasks, budget & AI</span>
+              <span className="text-foreground"> — one calm place for all of it.</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-              LifePulse gathers your loose thoughts, upcoming plans, and running to-dos into a single
-              elegant workspace. Draggable notes, nested notebooks, and a calm calendar — the
-              morning glance you actually want to open.
+              LifePulse brings your notes, tasks, calendar, expenses, music, and AI assistant together in one beautiful workspace.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/auth" search={{ mode: "signup" }}>
@@ -107,12 +105,16 @@ function Landing() {
           </div>
         </section>
 
-        <section className="mt-28 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-28 grid gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
           {[
-            { icon: StickyNote, label: "Sticky board", desc: "Freeform, colorful, draggable." },
-            { icon: NotebookText, label: "Notebooks", desc: "Nested folders for long-form." },
-            { icon: CalendarDays, label: "Calendar", desc: "Month, week, day — one look." },
-            { icon: CheckCircle2, label: "Tasks", desc: "Due dates, priority, done pile." },
+            { icon: StickyNote, label: "Sticky Notes", desc: "Colorful draggable notes, always in reach." },
+            { icon: NotebookText, label: "Notebooks", desc: "Rich pages with photos, audio, video & file attachments." },
+            { icon: CheckCircle2, label: "Tasks", desc: "Kanban board with priorities, due dates & folders." },
+            { icon: CalendarDays, label: "Calendar", desc: "Plan events and see your week at a glance." },
+            { icon: Wallet, label: "Expenses", desc: "Log spending, set budgets, track by category." },
+            { icon: Music2, label: "Music & Focus", desc: "YouTube search, ambient presets & playlists." },
+            { icon: Bot, label: "AI Assistant", desc: "Gemini-powered chat that knows your data." },
+            { icon: Sparkles, label: "Smart Alerts", desc: "Auto-notified on overdue tasks & budget limits." },
           ].map(({ icon: Icon, label, desc }) => (
             <div key={label} className="glass-card group relative overflow-hidden rounded-2xl p-6 transition-transform hover:-translate-y-1">
               <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-primary/20 to-transparent blur-2xl" />

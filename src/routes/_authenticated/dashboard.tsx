@@ -45,9 +45,7 @@ function Dashboard() {
           <h1 className="mt-2 sm:mt-4 font-display text-xl sm:text-3xl lg:text-4xl font-semibold leading-tight text-gradient-primary">
             Good {greeting()}.
           </h1>
-          <p className="mt-1 sm:mt-2 max-w-xl text-xs sm:text-sm text-muted-foreground">
-            Your quiet corner of the internet — a soft glance at everything on your mind today.
-          </p>
+
         </div>
       </header>
 
