@@ -365,6 +365,15 @@ function Notebooks() {
                     </>
                   )}
                 </Button>
+                <Button
+                  onClick={() => setDeleteFolderId(selectedFolderId)}
+                  variant="outline" size="sm"
+                  title="Delete this notebook"
+                  className="h-7 px-2 text-xs border-destructive/20 text-destructive hover:bg-destructive/15"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline ml-1">Delete</span>
+                </Button>
               </div>
             )}
           </div>

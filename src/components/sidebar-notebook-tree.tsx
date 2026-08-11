@@ -9,8 +9,9 @@ import {
   FileText,
   Plus,
   BookOpen,
+  Trash2,
 } from "lucide-react";
-import { useCreateFolder, useCreateItem, useFolders, useItems } from "@/hooks/use-lifeos";
+import { useCreateFolder, useCreateItem, useDeleteFolder, useDeleteItem, useFolders, useItems } from "@/hooks/use-lifeos";
 import type { Folder as FolderType, Item } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -24,6 +25,8 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
   const { data: items = [] } = useItems();
   const createFolder = useCreateFolder();
   const createItem = useCreateItem();
+  const deleteFolder = useDeleteFolder();
+  const deleteItem = useDeleteItem();
   const navigate = useNavigate();
 
   const routerSearch = useRouterState({
@@ -173,15 +176,37 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                 {/* Folder Label */}
                 <span className="truncate flex-1 text-xs">{folder.name}</span>
 
-                {/* Quick Add Page on hover */}
-                <button
-                  type="button"
-                  title="Add page inside folder"
-                  onClick={(e) => handleQuickAddPage(folder.id, e)}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground transition-all shrink-0 ml-auto"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
+                {/* Folder Actions on hover */}
+                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto shrink-0 transition-opacity">
+                  <button
+                    type="button"
+                    title="Add page inside notebook"
+                    onClick={(e) => handleQuickAddPage(folder.id, e)}
+                    className="p-0.5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground transition-all"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete notebook"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Delete notebook "${folder.name}" and all its pages?`)) {
+                        deleteFolder.mutate(folder.id, {
+                          onSuccess: () => {
+                            toast.success("Notebook deleted");
+                            if (currentFolderId === folder.id) {
+                              navigate({ to: "/notebooks" });
+                            }
+                          },
+                        });
+                      }
+                    }}
+                    className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Sub-tree children */}
@@ -224,6 +249,28 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
 
                 {/* Page Title */}
                 <span className="truncate flex-1 text-xs">{page.title || "Untitled"}</span>
+
+                {/* Delete Page Action on hover */}
+                <button
+                  type="button"
+                  title="Delete page"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete page "${page.title || "Untitled"}"?`)) {
+                      deleteItem.mutate(page.id, {
+                        onSuccess: () => {
+                          toast.success("Page deleted");
+                          if (currentPageId === page.id) {
+                            navigate({ to: "/notebooks", search: { folderId: page.folder_id ?? undefined } });
+                          }
+                        },
+                      });
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all shrink-0 ml-auto"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           );

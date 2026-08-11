@@ -67,6 +67,17 @@ public class FoldersController(AppDbContext db) : ControllerBase
         var folder = await db.Folders.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
         if (folder is null) return NotFound();
 
+        // Unlink or delete child items
+        var childItems = await db.Items.Where(i => i.FolderId == id && i.UserId == userId).ToListAsync();
+        db.Items.RemoveRange(childItems);
+
+        // Unlink child sub-folders to parent
+        var childFolders = await db.Folders.Where(f => f.ParentFolderId == id && f.UserId == userId).ToListAsync();
+        foreach (var cf in childFolders)
+        {
+            cf.ParentFolderId = folder.ParentFolderId;
+        }
+
         db.Folders.Remove(folder);
         await db.SaveChangesAsync();
         return NoContent();
