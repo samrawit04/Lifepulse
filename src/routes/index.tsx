@@ -51,10 +51,7 @@ function Landing() {
       <main className="mx-auto max-w-6xl px-6 pb-24 pt-12">
         <section className="grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-center">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1 text-xs font-medium text-muted-foreground">
-              Your all-in-one life dashboard
-            </div>
-            <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl text-foreground">
+            <h1 className="font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl text-foreground">
               Notes, tasks, budget & AI — one calm place for all of it.
             </h1>
             <p className="mt-6 max-w-xl text-lg text-muted-foreground">
@@ -83,20 +80,20 @@ function Landing() {
             <div className="pointer-events-none absolute -left-10 top-20 h-40 w-56 rotate-[-6deg] rounded-2xl bg-note-yellow p-4 shadow-note">
               <p className="text-xs font-semibold uppercase tracking-wider text-black/60">Idea</p>
               <p className="mt-2 font-display text-lg text-black/85">
-                Sunday brunch — invite ruth & Jonas
+                Sunday Buna ☕ — invite Bethlehem & Yared
               </p>
             </div>
             <div className="pointer-events-none absolute right-4 top-8 h-36 w-52 rotate-[5deg] rounded-2xl bg-note-pink p-4 shadow-note">
               <p className="text-xs font-semibold uppercase tracking-wider text-black/60">Urgent</p>
-              <p className="mt-2 font-display text-lg text-black/85">Reply to joseph, before 3pm</p>
+              <p className="mt-2 font-display text-lg text-black/85">Send Telebirr for electric bill before 3pm</p>
             </div>
             <div className="pointer-events-none absolute bottom-8 left-14 h-32 w-48 rotate-[-2deg] rounded-2xl bg-note-blue p-4 shadow-note">
               <p className="text-xs font-semibold uppercase tracking-wider text-black/60">Reference</p>
-              <p className="mt-2 font-display text-lg text-black/85">Reading list · fiction '26</p>
+              <p className="mt-2 font-display text-lg text-black/85">Enkutatash prep 🌼 · Doro wat recipe</p>
             </div>
             <div className="pointer-events-none absolute bottom-6 right-6 h-32 w-44 rotate-[3deg] rounded-2xl bg-note-lavender p-4 shadow-note">
               <p className="text-xs font-semibold uppercase tracking-wider text-black/60">Later</p>
-              <p className="mt-2 font-display text-lg text-black/85">Sketch a new logo</p>
+              <p className="mt-2 font-display text-lg text-black/85">Plan trip to Lalibela ✈️</p>
             </div>
           </div>
         </section>
