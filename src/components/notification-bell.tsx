@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Bell, Check, Trash2, X } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -40,52 +40,49 @@ function NotifItem({
   return (
     <div
       className={cn(
-        "group relative flex gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5 transition hover:bg-white/[0.04] rounded-xl cursor-pointer",
-        !n.isRead && "bg-white/[0.02]"
+        "group relative flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 transition-all rounded-xl cursor-pointer border border-transparent",
+        !n.isRead
+          ? "bg-white/[0.04] border-white/5 shadow-sm"
+          : "hover:bg-white/[0.03]"
       )}
       onClick={() => {
         onRead();
         if (n.link) onNavigate();
       }}
     >
-      {/* Unread indicator */}
-      {!n.isRead && (
-        <span
-          className={cn(
-            "absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full",
-            CATEGORY_DOT[catKey]
-          )}
-        />
-      )}
-
-      {/* Icon */}
-      <span className="text-lg sm:text-xl leading-none shrink-0 mt-0.5 select-none">{n.icon ?? "🔔"}</span>
+      {/* Icon badge */}
+      <div className="shrink-0 h-8 w-8 sm:h-9 sm:w-9 grid place-items-center rounded-xl bg-white/[0.05] border border-white/10 text-base sm:text-lg select-none">
+        {n.icon ?? "🔔"}
+      </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-1.5">
-          <p className={cn("text-xs sm:text-sm font-semibold leading-snug truncate", n.isRead ? "text-foreground/70" : "text-foreground")}>
+          <p className={cn("text-xs sm:text-sm font-semibold leading-snug break-words", n.isRead ? "text-foreground/75" : "text-foreground font-bold")}>
             {n.title}
           </p>
           <button
             onClick={(e) => { e.stopPropagation(); onDismiss(); }}
-            className="shrink-0 h-5 w-5 grid place-items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-white/10 transition opacity-80 sm:opacity-0 sm:group-hover:opacity-100"
+            className="shrink-0 h-5 w-5 grid place-items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-white/10 transition opacity-80 sm:opacity-0 sm:group-hover:opacity-100 -mr-0.5 -mt-0.5"
             title="Dismiss"
           >
             <X className="h-3 w-3" />
           </button>
         </div>
-        <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed mt-0.5 line-clamp-2">{n.body}</p>
-        <p className="text-[9px] sm:text-[10px] text-muted-foreground/60 mt-1">
-          {(() => {
-            try {
-              const d = new Date(n.createdAt);
-              if (isNaN(d.getTime()) || d.getFullYear() < 2000) return "just now";
-              return formatDistanceToNow(d, { addSuffix: true });
-            } catch {
-              return "just now";
-            }
-          })()}
-        </p>
+        <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed mt-0.5 break-words line-clamp-2">{n.body}</p>
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", CATEGORY_DOT[catKey])} />
+          <span className="text-[10px] text-muted-foreground/60 font-medium">
+            {(() => {
+              try {
+                const d = new Date(n.createdAt);
+                if (isNaN(d.getTime()) || d.getFullYear() < 2000) return "just now";
+                return formatDistanceToNow(d, { addSuffix: true });
+              } catch {
+                return "just now";
+              }
+            })()}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -100,21 +97,43 @@ export function NotificationBell() {
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const openPanel = () => {
+  const updateCoords = useCallback(() => {
     if (!btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
     const top = rect.bottom + 8;
-    const panelWidth = Math.min(384, window.innerWidth - 24);
+    const isMobile = window.innerWidth < 640;
 
-    // If button has space to expand rightwards, align left edge
-    if (rect.left + panelWidth <= window.innerWidth - 12) {
-      setCoords({ top, left: Math.max(12, rect.left) });
+    if (isMobile) {
+      setCoords({ top, left: 12, right: 12 });
     } else {
-      // Otherwise align right edge
-      setCoords({ top, right: Math.max(12, window.innerWidth - rect.right) });
+      const panelWidth = 384; // 24rem
+      // If button has space to expand rightwards, align left edge
+      if (rect.left + panelWidth <= window.innerWidth - 12) {
+        setCoords({ top, left: Math.max(12, rect.left) });
+      } else {
+        // Right align to button edge, but keep within viewport boundary
+        const rightPos = Math.max(12, window.innerWidth - rect.right);
+        setCoords({ top, right: rightPos });
+      }
     }
+  }, []);
+
+  const openPanel = () => {
+    updateCoords();
     setOpen((v) => !v);
   };
+
+  // Recalculate position on window resize or scroll when open
+  useEffect(() => {
+    if (!open) return;
+    const handleResize = () => updateCoords();
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleResize, true);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleResize, true);
+    };
+  }, [open, updateCoords]);
 
   // Click-outside to close
   useEffect(() => {
@@ -162,13 +181,13 @@ export function NotificationBell() {
             top: coords.top,
             left: coords.left !== undefined ? `${coords.left}px` : undefined,
             right: coords.right !== undefined ? `${coords.right}px` : undefined,
-            maxWidth: "calc(100vw - 24px)",
+            maxHeight: `calc(100vh - ${coords.top + 16}px)`,
             zIndex: 9999
           }}
-          className="w-[calc(100vw-24px)] max-w-xs sm:max-w-sm sm:w-96 rounded-2xl border border-white/10 bg-sidebar/95 shadow-2xl backdrop-blur-2xl overflow-hidden animate-in slide-in-from-top-2 duration-150"
+          className="w-[calc(100vw-24px)] sm:w-96 max-w-sm rounded-2xl border border-white/10 bg-sidebar/95 shadow-2xl backdrop-blur-2xl overflow-hidden animate-in slide-in-from-top-2 duration-150 flex flex-col"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-white/5 px-4 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <Bell className="h-4 w-4 text-primary" />
               <span className="font-display text-sm font-semibold text-foreground">Notifications</span>
@@ -201,7 +220,7 @@ export function NotificationBell() {
           </div>
 
           {/* Body */}
-          <div className="max-h-[70vh] overflow-y-auto p-1.5">
+          <div className="overflow-y-auto p-1.5 flex-1 min-h-0">
             {isEmpty ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-2xl">
@@ -211,7 +230,7 @@ export function NotificationBell() {
                 <p className="mt-1 text-xs text-muted-foreground">No notifications right now.</p>
               </div>
             ) : (
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {notifications.map((n) => (
                   <NotifItem
                     key={n.id}
@@ -230,7 +249,7 @@ export function NotificationBell() {
 
           {/* Category legend */}
           {!isEmpty && (
-            <div className="flex items-center gap-3 border-t border-white/5 px-4 py-2.5">
+            <div className="flex items-center gap-3 border-t border-white/5 px-4 py-2.5 shrink-0 bg-white/[0.01]">
               {(["calendar", "task", "expense"] as NotifCategory[]).map((cat) => (
                 <div key={cat} className="flex items-center gap-1.5">
                   <span className={cn("h-2 w-2 rounded-full", CATEGORY_DOT[cat])} />

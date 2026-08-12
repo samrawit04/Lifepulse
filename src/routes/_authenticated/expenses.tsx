@@ -39,6 +39,18 @@ type PeriodType = "today" | "week" | "month" | "last_month" | "all";
 
 const CURRENCY = "Birr";
 
+function SummaryTile({ label, value, accent, big }: { label: string; value: number; accent: string; big?: boolean }) {
+  return (
+    <div className="glass-card relative flex flex-col justify-between overflow-hidden rounded-2xl p-5 border border-white/5">
+      <div className={cn("absolute inset-0 bg-gradient-to-br opacity-30 pointer-events-none", accent)} />
+      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className={cn("font-display font-semibold mt-2", big ? "text-3xl text-primary" : "text-2xl")}>
+        {value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-sm font-normal text-muted-foreground">{CURRENCY}</span>
+      </p>
+    </div>
+  );
+}
+
 function ExpensesPage() {
   const { data: expenses = [] } = useExpenses();
   const create = useCreateExpense();

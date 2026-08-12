@@ -346,4 +346,71 @@ html.light .text-gradient-primary {
 
 @utility animate-skeleton {
   animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+/* ── LifePulse Custom Toast Theme (Sonner Overrides) ── */
+[data-sonner-toaster] {
+  font-family: var(--font-sans) !important;
+}
+
+[data-sonner-toast] {
+  background: oklch(0.14 0.02 160 / 0.92) !important;
+  border: 1px solid oklch(1 0 0 / 0.12) !important;
+  backdrop-filter: blur(16px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
+  color: oklch(0.96 0.01 160) !important;
+  border-radius: 1rem !important;
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.08) inset,
+    0 20px 45px -15px oklch(0 0 0 / 0.85) !important;
+  padding: 0.875rem 1rem !important;
+}
+
+[data-sonner-toast][data-type="success"] {
+  background: linear-gradient(135deg, oklch(0.18 0.04 160 / 0.95), oklch(0.14 0.02 160 / 0.95)) !important;
+  border-color: oklch(0.78 0.14 160 / 0.35) !important;
+  box-shadow:
+    0 0 20px -5px oklch(0.78 0.14 160 / 0.25),
+    0 20px 45px -15px oklch(0 0 0 / 0.85) !important;
+  color: oklch(0.96 0.01 160) !important;
+}
+
+[data-sonner-toast][data-type="error"] {
+  background: linear-gradient(135deg, oklch(0.18 0.04 20 / 0.95), oklch(0.14 0.02 160 / 0.95)) !important;
+  border-color: oklch(0.63 0.22 20 / 0.4) !important;
+  box-shadow:
+    0 0 20px -5px oklch(0.63 0.22 20 / 0.25),
+    0 20px 45px -15px oklch(0 0 0 / 0.85) !important;
+  color: oklch(0.98 0.01 80) !important;
+}
+
+[data-sonner-toast][data-type="info"],
+[data-sonner-toast][data-type="warning"] {
+  background: linear-gradient(135deg, oklch(0.18 0.04 85 / 0.95), oklch(0.14 0.02 160 / 0.95)) !important;
+  border-color: oklch(0.82 0.12 85 / 0.35) !important;
+  box-shadow:
+    0 0 20px -5px oklch(0.82 0.12 85 / 0.2),
+    0 20px 45px -15px oklch(0 0 0 / 0.85) !important;
+  color: oklch(0.96 0.01 160) !important;
+}
+
+[data-sonner-toast] [data-title] {
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  letter-spacing: -0.01em !important;
+}
+
+[data-sonner-toast] [data-description] {
+  font-size: 0.775rem !important;
+  color: oklch(0.72 0.02 160) !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+  background: oklch(1 0 0 / 0.08) !important;
+  border: 1px solid oklch(1 0 0 / 0.1) !important;
+  color: oklch(0.72 0.02 160) !important;
+}
+[data-sonner-toast] [data-close-button]:hover {
+  background: oklch(1 0 0 / 0.15) !important;
+  color: oklch(0.96 0.01 160) !important;
 }
