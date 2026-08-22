@@ -729,6 +729,9 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
   const [pasteHint, setPasteHint] = useState<string | null>(null);
 
   // Synchronous references for auto-save and unmount persistence
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
   const titleRef = useRef(title);
@@ -737,45 +740,47 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
 
   const save = useCallback(
     (overrideBlocks?: Block[], overrideTitle?: string) => {
+      if (!isDirtyRef.current && !overrideBlocks && !overrideTitle) return;
       isDirtyRef.current = false;
       const curBlocks = overrideBlocks ?? blocksRef.current;
       const curTitle = overrideTitle ?? titleRef.current;
       const cleaned = cleanBlocks(curBlocks);
-      onChange({
+      onChangeRef.current({
         title: curTitle,
         content: serializeBlocks(cleaned),
       });
     },
-    [onChange]
+    []
   );
 
-  // Debounced auto-save (400ms after user pauses typing)
+  // Debounced auto-save (500ms after user pauses typing)
   useEffect(() => {
     if (!isDirtyRef.current) return;
     const timer = setTimeout(() => {
       save();
-    }, 400);
+    }, 500);
     return () => clearTimeout(timer);
   }, [blocks, title, save]);
 
-  // Flush any pending save on unmount (e.g. navigation / back / tab switch)
+  // Flush any pending save on unmount only
   useEffect(() => {
     return () => {
       if (isDirtyRef.current) {
+        isDirtyRef.current = false;
         const cleaned = cleanBlocks(blocksRef.current);
-        onChange({
+        onChangeRef.current({
           title: titleRef.current,
           content: serializeBlocks(cleaned),
         });
       }
     };
-  }, [onChange]);
+  }, []);
 
   const applyColor = useCallback((colorValue: string | null) => {
     setPageColor(colorValue);
-    onChange({ color: colorValue });
+    onChangeRef.current({ color: colorValue });
     setShowColorPicker(false);
-  }, [onChange]);
+  }, []);
 
   const updateText = (id: string, content: string) => {
     isDirtyRef.current = true;
@@ -803,10 +808,10 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
         ...prev.slice(insertAt),
       ]);
       isDirtyRef.current = false;
-      onChange({ title: titleRef.current, content: serializeBlocks(next) });
+      onChangeRef.current({ title: titleRef.current, content: serializeBlocks(next) });
       return next;
     });
-  }, [onChange]);
+  }, []);
 
   const insertMedia = useCallback((media: Omit<MediaBlock, "kind">) => {
     insertMultipleMedia([media]);
@@ -816,10 +821,10 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
     setBlocks((prev) => {
       const next = prev.map((b) => (b.id === id && b.kind === "media" ? { ...b, layout } : b));
       isDirtyRef.current = false;
-      onChange({ title: titleRef.current, content: serializeBlocks(next) });
+      onChangeRef.current({ title: titleRef.current, content: serializeBlocks(next) });
       return next;
     });
-  }, [onChange]);
+  }, []);
 
   const swapBlocks = useCallback((id1: string, id2: string) => {
     setBlocks((prev) => {
@@ -831,10 +836,10 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
       next[idx1] = next[idx2];
       next[idx2] = temp;
       isDirtyRef.current = false;
-      onChange({ title: titleRef.current, content: serializeBlocks(next) });
+      onChangeRef.current({ title: titleRef.current, content: serializeBlocks(next) });
       return next;
     });
-  }, [onChange]);
+  }, []);
 
   // ── Clipboard paste handler (images & files) ──────────────────────────────
   const handlePaste = useCallback((e: React.ClipboardEvent | ClipboardEvent) => {

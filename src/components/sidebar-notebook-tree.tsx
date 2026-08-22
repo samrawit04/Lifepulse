@@ -55,12 +55,12 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
   const navigate = useNavigate();
   const { pinnedFolderIds, togglePinFolder } = usePinnedFolders();
 
-  const routerSearch = useRouterState({
-    select: (s) => (s.location.search as { folderId?: string; pageId?: string }) || {},
+  const currentFolderId = useRouterState({
+    select: (s) => (s.location.search as { folderId?: string })?.folderId || null,
   });
-
-  const currentFolderId = routerSearch.folderId || null;
-  const currentPageId = routerSearch.pageId || null;
+  const currentPageId = useRouterState({
+    select: (s) => (s.location.search as { pageId?: string })?.pageId || null,
+  });
 
   // Root expandable state (default true)
   const [rootExpanded, setRootExpanded] = useState(true);
@@ -93,15 +93,13 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
         cur = f?.parent_folder_id ?? null;
       }
       setExpandedFolders((prev) => {
+        const needsExpand = parents.some((id) => !prev[id]);
+        if (!needsExpand) return prev;
         const next = { ...prev };
-        let changed = false;
         parents.forEach((id) => {
-          if (!next[id]) {
-            next[id] = true;
-            changed = true;
-          }
+          next[id] = true;
         });
-        return changed ? next : prev;
+        return next;
       });
     }
   }, [currentFolderId, currentPageId, folders, notebookPages]);
