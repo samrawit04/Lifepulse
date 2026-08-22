@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -31,6 +31,7 @@ import {
   SwitchCamera,
   Pin,
   PinOff,
+  Palette,
 } from "lucide-react";
 import {
   useCreateFolder,
@@ -43,6 +44,7 @@ import {
   useUpdateItem,
 } from "@/hooks/use-lifeos";
 import type { Folder, Item } from "@/lib/lifeos-types";
+import { NOTE_COLORS, noteGradient } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -159,9 +161,8 @@ function Notebooks() {
   const createItem = useCreateItem();
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
+  const navigate = useNavigate();
 
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [selectedPage, setSelectedPage] = useState<Item | null>(null);
   const [newName, setNewName] = useState("");
 
   // ── Pinned folders (localStorage) ──────────────────────────────────────────
@@ -181,32 +182,38 @@ function Notebooks() {
   };
 
   const search = Route.useSearch();
-
-  useEffect(() => {
-    if (search.folderId !== undefined) {
-      setSelectedFolderId(search.folderId || null);
-    } else if (search.pageId === undefined) {
-      setSelectedFolderId(null);
-    }
-
-    if (search.pageId) {
-      const page = items.find((i) => i.id === search.pageId);
-      if (page) {
-        setSelectedPage(page);
-        if (page.folder_id) {
-          setSelectedFolderId(page.folder_id);
-        }
-      }
-    } else {
-      setSelectedPage(null);
-    }
-  }, [search.folderId, search.pageId, items]);
+  const selectedFolderId = search.folderId ?? null;
+  const selectedPage = useMemo(() => {
+    if (!search.pageId) return null;
+    return items.find((i) => i.id === search.pageId && i.type === "notebook_page" && !i.archived) ?? null;
+  }, [search.pageId, items]);
 
   const [createSubFolderParentId, setCreateSubFolderParentId] = useState<string | null>(null);
   const [createSubFolderName, setCreateSubFolderName] = useState("");
   const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
   const [renameFolderName, setRenameFolderName] = useState("");
   const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null);
+
+  const openFolder = (folderId: string | null) => {
+    navigate({
+      to: "/notebooks",
+      search: { folderId: folderId ?? undefined, pageId: undefined },
+    });
+  };
+
+  const openPage = (folderId: string | null, pageId: string) => {
+    navigate({
+      to: "/notebooks",
+      search: { folderId: folderId ?? undefined, pageId },
+    });
+  };
+
+  const closePage = () => {
+    navigate({
+      to: "/notebooks",
+      search: { folderId: selectedFolderId ?? undefined, pageId: undefined },
+    });
+  };
 
   const currentFolders = useMemo(
     () => {
@@ -260,8 +267,17 @@ function Notebooks() {
   const addPage = () => {
     if (!selectedFolderId) return toast.error("Choose a notebook first");
     createItem.mutate(
-      { type: "notebook_page", title: "Untitled", content: serializeBlocks([{ id: genId(), kind: "text", content: "" }]), folder_id: selectedFolderId },
-      { onSuccess: (i) => setSelectedPage(i) }
+      {
+        type: "notebook_page",
+        title: "Untitled",
+        content: serializeBlocks([{ id: genId(), kind: "text", content: "" }]),
+        folder_id: selectedFolderId,
+      },
+      {
+        onSuccess: (newPage) => {
+          openPage(selectedFolderId, newPage.id);
+        },
+      }
     );
   };
 
@@ -289,7 +305,7 @@ function Notebooks() {
       onSuccess: () => {
         if (selectedFolderId === deleteFolderId) {
           const del = folders.find((f) => f.id === deleteFolderId);
-          setSelectedFolderId(del?.parent_folder_id || null);
+          openFolder(del?.parent_folder_id || null);
         }
         setDeleteFolderId(null);
       },
@@ -304,10 +320,10 @@ function Notebooks() {
         {/* Breadcrumbs — very compact */}
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none whitespace-nowrap">
           <button
-            onClick={() => { setSelectedFolderId(null); setSelectedPage(null); }}
+            onClick={() => openFolder(null)}
             className={cn(
               "flex items-center gap-1 text-xs font-medium transition-colors hover:text-primary rounded px-1 py-0.5",
-              selectedFolderId === null ? "text-foreground" : "text-muted-foreground"
+              selectedFolderId === null && !search.pageId ? "text-foreground" : "text-muted-foreground"
             )}
           >
             <BookOpen className="h-3 w-3 shrink-0" />
@@ -320,11 +336,11 @@ function Notebooks() {
               <div key={folder.id} className="flex items-center gap-0.5">
                 <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
                 <button
-                  disabled={isLast && !selectedPage}
-                  onClick={() => { setSelectedFolderId(folder.id); setSelectedPage(null); }}
+                  disabled={isLast && !search.pageId}
+                  onClick={() => openFolder(folder.id)}
                   className={cn(
                     "text-xs font-medium transition-colors hover:text-primary rounded px-1 py-0.5",
-                    isLast && !selectedPage ? "text-foreground" : "text-muted-foreground"
+                    isLast && !search.pageId ? "text-foreground" : "text-muted-foreground"
                   )}
                 >
                   {folder.name}
@@ -344,7 +360,7 @@ function Notebooks() {
         </div>
 
         {/* Actions — only on list view */}
-        {!selectedPage && (
+        {!search.pageId && (
           <div className="flex items-center gap-1.5 shrink-0">
             {selectedFolderId === null ? (
               <div className="flex items-center gap-1.5">
@@ -413,15 +429,28 @@ function Notebooks() {
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-auto min-h-0">
-        {selectedPage ? (
-          <NoteEditor
-            key={selectedPage.id}
-            page={selectedPage}
-            onClose={() => setSelectedPage(null)}
-            onChange={(patch) => updateItem.mutate({ id: selectedPage.id, patch })}
-            onArchive={() => { updateItem.mutate({ id: selectedPage.id, patch: { archived: true } }); setSelectedPage(null); }}
-            onDelete={() => { deleteItem.mutate(selectedPage.id); setSelectedPage(null); }}
-          />
+        {search.pageId ? (
+          selectedPage ? (
+            <NoteEditor
+              key={selectedPage.id}
+              page={selectedPage}
+              onClose={closePage}
+              onChange={(patch) => updateItem.mutate({ id: selectedPage.id, patch })}
+              onArchive={() => {
+                updateItem.mutate({ id: selectedPage.id, patch: { archived: true } });
+                closePage();
+              }}
+              onDelete={() => {
+                deleteItem.mutate(selectedPage.id);
+                closePage();
+              }}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-xs font-medium">Loading page…</span>
+            </div>
+          )
         ) : (
           <div className="p-5 max-w-5xl mx-auto space-y-8">
             {/* Notebooks grid */}
@@ -451,7 +480,7 @@ function Notebooks() {
                         colorAccent={NOTEBOOK_COLORS[idx % NOTEBOOK_COLORS.length]}
                         isPinned={pinnedFolderIds.has(folder.id)}
                         onPin={() => togglePinFolder(folder.id)}
-                        onClick={() => setSelectedFolderId(folder.id)}
+                        onClick={() => openFolder(folder.id)}
                         onRename={() => { setRenameFolderId(folder.id); setRenameFolderName(folder.name); }}
                         onDelete={() => setDeleteFolderId(folder.id)}
                         pageCount={items.filter((i) => i.type === "notebook_page" && !i.archived && i.folder_id === folder.id).length}
@@ -501,7 +530,7 @@ function Notebooks() {
                         <PageCard
                           key={p.id}
                           page={p}
-                          onClick={() => setSelectedPage(p)}
+                          onClick={() => openPage(p.folder_id ?? selectedFolderId, p.id)}
                           onPinToggle={() => updateItem.mutate({ id: p.id, patch: { pinned: !p.pinned } }, { onSuccess: () => toast.success(p.pinned ? "Page unpinned" : "Page pinned") })}
                         />
                       ))}
@@ -611,21 +640,29 @@ function NotebookCard({ folder, colorAccent, isPinned, onPin, onClick, onRename,
 
 function PageCard({ page, onClick, onPinToggle }: { page: Item; onClick: () => void; onPinToggle: () => void }) {
   const preview = useMemo(() => blockPreview(page.content), [page.content]);
+  const pageColor = page.color ? NOTE_COLORS.find(c => c.value === page.color) : null;
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        "group relative flex items-start gap-4 text-left w-full p-4 rounded-2xl bg-card/40 border border-white/[0.05] hover:bg-card/70 hover:border-white/[0.12] hover:shadow-note transition-all duration-300",
+        "group relative flex items-start gap-4 text-left w-full p-4 rounded-2xl bg-card/40 border border-white/[0.05] hover:bg-card/70 hover:border-white/[0.12] hover:shadow-note transition-all duration-300 overflow-hidden",
         page.pinned && "ring-1 ring-primary/20 border-primary/10"
       )}
     >
+      {/* Color stripe accent */}
+      {pageColor && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1.5"
+          style={{ background: `linear-gradient(to bottom, ${pageColor.from}, ${pageColor.to})` }}
+        />
+      )}
       {page.pinned && (
         <div className="absolute top-2.5 right-2.5">
           <Pin className="h-3 w-3 text-primary fill-primary opacity-50" />
         </div>
       )}
-      <div className="hidden sm:flex flex-col items-center gap-1 shrink-0 pt-1">
+      <div className={cn("hidden sm:flex flex-col items-center gap-1 shrink-0 pt-1", pageColor && "ml-2")}>
         <div className="h-4 w-4 rounded-full border-2 border-primary/40 bg-background group-hover:border-primary group-hover:bg-primary/20 transition-all flex items-center justify-center">
           <div className="h-1 w-1 rounded-full bg-primary/60 group-hover:bg-primary" />
         </div>
@@ -678,6 +715,9 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
 }) {
   const [blocks, setBlocks] = useState<Block[]>(() => parseBlocks(page.content));
   const [title, setTitle] = useState(page.title ?? "");
+  const [pageColor, setPageColor] = useState<string | null>(page.color ?? null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const colorBtnRef = useRef<HTMLButtonElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
@@ -688,19 +728,63 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
   const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [pasteHint, setPasteHint] = useState<string | null>(null);
 
+  // Synchronous references for auto-save and unmount persistence
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const isDirtyRef = useRef(false);
+
   const save = useCallback(
     (overrideBlocks?: Block[], overrideTitle?: string) => {
-      const cleaned = cleanBlocks(overrideBlocks ?? blocks);
+      isDirtyRef.current = false;
+      const curBlocks = overrideBlocks ?? blocksRef.current;
+      const curTitle = overrideTitle ?? titleRef.current;
+      const cleaned = cleanBlocks(curBlocks);
       onChange({
-        title: overrideTitle ?? title,
+        title: curTitle,
         content: serializeBlocks(cleaned),
       });
     },
-    [blocks, title, onChange]
+    [onChange]
   );
 
+  // Debounced auto-save (400ms after user pauses typing)
+  useEffect(() => {
+    if (!isDirtyRef.current) return;
+    const timer = setTimeout(() => {
+      save();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [blocks, title, save]);
+
+  // Flush any pending save on unmount (e.g. navigation / back / tab switch)
+  useEffect(() => {
+    return () => {
+      if (isDirtyRef.current) {
+        const cleaned = cleanBlocks(blocksRef.current);
+        onChange({
+          title: titleRef.current,
+          content: serializeBlocks(cleaned),
+        });
+      }
+    };
+  }, [onChange]);
+
+  const applyColor = useCallback((colorValue: string | null) => {
+    setPageColor(colorValue);
+    onChange({ color: colorValue });
+    setShowColorPicker(false);
+  }, [onChange]);
+
   const updateText = (id: string, content: string) => {
+    isDirtyRef.current = true;
     setBlocks((prev) => prev.map((b) => b.id === id && b.kind === "text" ? { ...b, content } : b));
+  };
+
+  const handleTitleChange = (val: string) => {
+    isDirtyRef.current = true;
+    setTitle(val);
   };
 
   const insertMultipleMedia = useCallback((mediaItems: Omit<MediaBlock, "kind">[]) => {
@@ -718,10 +802,11 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
         continuationBlock,
         ...prev.slice(insertAt),
       ]);
-      onChange({ title, content: serializeBlocks(next) });
+      isDirtyRef.current = false;
+      onChange({ title: titleRef.current, content: serializeBlocks(next) });
       return next;
     });
-  }, [onChange, title]);
+  }, [onChange]);
 
   const insertMedia = useCallback((media: Omit<MediaBlock, "kind">) => {
     insertMultipleMedia([media]);
@@ -730,10 +815,11 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
   const updateBlockLayout = useCallback((id: string, layout: "auto" | "full" | "half" | "third") => {
     setBlocks((prev) => {
       const next = prev.map((b) => (b.id === id && b.kind === "media" ? { ...b, layout } : b));
-      onChange({ title, content: serializeBlocks(next) });
+      isDirtyRef.current = false;
+      onChange({ title: titleRef.current, content: serializeBlocks(next) });
       return next;
     });
-  }, [onChange, title]);
+  }, [onChange]);
 
   const swapBlocks = useCallback((id1: string, id2: string) => {
     setBlocks((prev) => {
@@ -744,10 +830,11 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
       const temp = next[idx1];
       next[idx1] = next[idx2];
       next[idx2] = temp;
-      onChange({ title, content: serializeBlocks(next) });
+      isDirtyRef.current = false;
+      onChange({ title: titleRef.current, content: serializeBlocks(next) });
       return next;
     });
-  }, [onChange, title]);
+  }, [onChange]);
 
   // ── Clipboard paste handler (images & files) ──────────────────────────────
   const handlePaste = useCallback((e: React.ClipboardEvent | ClipboardEvent) => {
@@ -993,12 +1080,16 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
     return result;
   }, [blocks]);
 
+  // Derive background style from current color
+  const editorBg = pageColor ? noteGradient(pageColor) : undefined;
+
   return (
     <>
       <div className="flex flex-col h-full overflow-hidden">
         {/* ── Scrollable writing area ── */}
         <div
-          className="flex-1 overflow-auto min-h-0 relative"
+          className="flex-1 overflow-auto min-h-0 relative transition-colors duration-500"
+          style={editorBg ? { background: editorBg } : undefined}
           onPaste={handlePaste}
         >
           {/* Paste hint toast */}
@@ -1010,10 +1101,13 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
           <div className="mx-auto max-w-4xl px-4 pt-5 pb-6">
             <input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               onBlur={() => save()}
               placeholder="Title"
-              className="w-full bg-transparent font-display text-2xl sm:text-3xl font-semibold text-foreground placeholder:text-muted-foreground/25 focus:outline-none leading-tight"
+              className={cn(
+                "w-full bg-transparent font-display text-2xl sm:text-3xl font-semibold placeholder:text-muted-foreground/25 focus:outline-none leading-tight",
+                pageColor ? "text-foreground/90" : "text-foreground"
+              )}
             />
             <p className="text-[10px] text-muted-foreground/40 mt-1 mb-4 font-medium tracking-wider uppercase">
               {format(new Date(page.updated_at), "EEEE, MMM d · yyyy")}
@@ -1121,6 +1215,40 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
                 document.body
               )}
 
+              {/* Page color picker */}
+              <div className="relative">
+                <button
+                  ref={colorBtnRef}
+                  type="button"
+                  onClick={() => setShowColorPicker((p) => !p)}
+                  title="Set page color / mood"
+                  className={cn(
+                    "shrink-0 flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg transition-colors",
+                    showColorPicker
+                      ? "bg-white/10 text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/[0.06]"
+                  )}
+                >
+                  <Palette className="h-4 w-4" />
+                  <span className="hidden xs:inline">Color</span>
+                  {pageColor && (
+                    <span
+                      className="h-3 w-3 rounded-full ring-1 ring-white/20 shrink-0 ml-0.5"
+                      style={{ background: NOTE_COLORS.find(c => c.value === pageColor)?.from ?? "transparent" }}
+                    />
+                  )}
+                </button>
+                {showColorPicker && createPortal(
+                  <PageColorPicker
+                    anchorEl={colorBtnRef.current!}
+                    currentColor={pageColor}
+                    onSelect={applyColor}
+                    onClose={() => setShowColorPicker(false)}
+                  />,
+                  document.body
+                )}
+              </div>
+
               <div className="shrink-0 w-px h-4 bg-white/[0.08] mx-1" />
 
               <button
@@ -1217,6 +1345,89 @@ function ToolbarBtn({ icon, label, onClick, title, btnRef }: { icon: React.React
       {icon}
       <span className="hidden sm:inline">{label}</span>
     </button>
+  );
+}
+
+// ─── Page Color Picker ─────────────────────────────────────────────────────────
+
+function PageColorPicker({ anchorEl, currentColor, onSelect, onClose }: {
+  anchorEl: HTMLElement;
+  currentColor: string | null;
+  onSelect: (color: string | null) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const rect = anchorEl.getBoundingClientRect();
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node) && !anchorEl.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [anchorEl, onClose]);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: "fixed",
+        bottom: `${window.innerHeight - rect.top + 8}px`,
+        left: `${rect.left}px`,
+        zIndex: 9999,
+      }}
+      className="animate-in fade-in slide-in-from-bottom-2 duration-150"
+    >
+      <div className="bg-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-3 w-[220px]">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-2.5 px-1">
+          Page Mood
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {NOTE_COLORS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => onSelect(c.value)}
+              title={`${c.name} — ${c.meaning}`}
+              className={cn(
+                "group flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all hover:scale-105",
+                currentColor === c.value
+                  ? "ring-2 ring-white/40 scale-105"
+                  : "hover:bg-white/5"
+              )}
+            >
+              <div
+                className="h-8 w-8 rounded-full shadow-md ring-1 ring-black/10"
+                style={{ background: `linear-gradient(135deg, ${c.from}, ${c.to})` }}
+              />
+              <span className="text-[9px] text-muted-foreground font-medium leading-none">{c.name}</span>
+              <span className="text-[8px] text-muted-foreground/50 leading-none">{c.meaning}</span>
+            </button>
+          ))}
+          {/* Clear / no color */}
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            title="Clear color"
+            className={cn(
+              "group flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all hover:scale-105",
+              currentColor === null
+                ? "ring-2 ring-white/40 scale-105"
+                : "hover:bg-white/5"
+            )}
+          >
+            <div className="h-8 w-8 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center">
+              <X className="h-3 w-3 text-muted-foreground/40" />
+            </div>
+            <span className="text-[9px] text-muted-foreground font-medium leading-none">None</span>
+            <span className="text-[8px] text-muted-foreground/50 leading-none">Clear</span>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

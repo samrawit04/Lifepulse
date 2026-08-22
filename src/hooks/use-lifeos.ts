@@ -60,12 +60,19 @@ export function useCreateItem() {
         updated_at: new Date().toISOString(),
       };
       qc.setQueryData<Item[]>(ITEMS_KEY, (old = []) => [optimistic, ...old]);
-      return { prev };
+      return { prev, optimisticId: optimistic.id };
+    },
+    onSuccess: (created, _variables, ctx) => {
+      qc.setQueryData<Item[]>(ITEMS_KEY, (old = []) => {
+        if (ctx?.optimisticId) {
+          return old.map((i) => (i.id === ctx.optimisticId ? created : i));
+        }
+        return [created, ...old.filter((i) => i.id !== created.id)];
+      });
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(ITEMS_KEY, ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ITEMS_KEY }),
   });
 }
 
@@ -97,15 +104,21 @@ export function useUpdateItem() {
       if (prev) {
         qc.setQueryData<Item[]>(
           ITEMS_KEY,
-          prev.map((i) => (i.id === id ? { ...i, ...patch } as Item : i)),
+          prev.map((i) => (i.id === id ? ({ ...i, ...patch, updated_at: new Date().toISOString() } as Item) : i)),
         );
       }
       return { prev };
     },
+    onSuccess: (updated) => {
+      if (updated?.id) {
+        qc.setQueryData<Item[]>(ITEMS_KEY, (old = []) =>
+          old.map((i) => (i.id === updated.id ? updated : i)),
+        );
+      }
+    },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(ITEMS_KEY, ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ITEMS_KEY }),
   });
 }
 
