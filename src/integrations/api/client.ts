@@ -29,6 +29,28 @@ export interface PlaylistItem {
   addedAt: string;
 }
 
+export interface PinterestPin {
+  id: string;
+  title: string | null;
+  description: string | null;
+  imageUrl: string;
+  thumbnailUrl: string;
+  width: number;
+  height: number;
+  pinnerName: string | null;
+  pinnerAvatar: string | null;
+  pinUrl: string;
+  dominantColor: string | null;
+  boardName: string | null;
+  sourceDomain: string | null;
+}
+
+export interface PinterestSearchResponse {
+  pins: PinterestPin[];
+  bookmark: string | null;
+  hasMore: boolean;
+}
+
 export interface AppNotification {
   id: string;
   userId: string;
@@ -318,6 +340,18 @@ class ApiClient {
 
     deleteAll: (): Promise<void> =>
       this.delete<void>("/api/notifications"),
+  };
+
+  // ── Pinterest Operations ────────────────────────────────────────────────────
+  pinterest = {
+    search: (query: string, bookmark?: string): Promise<PinterestSearchResponse> => {
+      const params = new URLSearchParams({ q: query });
+      if (bookmark) params.set("bookmark", bookmark);
+      return this.get<PinterestSearchResponse>(`/api/pinterest/search?${params}`);
+    },
+    getOembed: (pinUrl: string): Promise<any> => {
+      return this.get<any>(`/api/pinterest/oembed?url=${encodeURIComponent(pinUrl)}`);
+    },
   };
 }
 

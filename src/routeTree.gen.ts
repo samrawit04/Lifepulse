@@ -22,6 +22,7 @@ import { Route as AuthenticatedExpensesRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedArchiveRouteImport } from './routes/_authenticated/archive'
+import { Route as AuthenticatedPinterestRouteImport } from './routes/_authenticated/pinterest'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -87,6 +88,11 @@ const AuthenticatedArchiveRoute = AuthenticatedArchiveRouteImport.update({
   path: '/archive',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPinterestRoute = AuthenticatedPinterestRouteImport.update({
+  id: '/pinterest',
+  path: '/pinterest',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/expenses': typeof AuthenticatedExpensesRoute
   '/music': typeof AuthenticatedMusicRoute
   '/notebooks': typeof AuthenticatedNotebooksRoute
+  '/pinterest': typeof AuthenticatedPinterestRoute
   '/sticky': typeof AuthenticatedStickyRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByTo {
   '/expenses': typeof AuthenticatedExpensesRoute
   '/music': typeof AuthenticatedMusicRoute
   '/notebooks': typeof AuthenticatedNotebooksRoute
+  '/pinterest': typeof AuthenticatedPinterestRoute
   '/sticky': typeof AuthenticatedStickyRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -128,6 +136,7 @@ export interface FileRoutesById {
   '/_authenticated/expenses': typeof AuthenticatedExpensesRoute
   '/_authenticated/music': typeof AuthenticatedMusicRoute
   '/_authenticated/notebooks': typeof AuthenticatedNotebooksRoute
+  '/_authenticated/pinterest': typeof AuthenticatedPinterestRoute
   '/_authenticated/sticky': typeof AuthenticatedStickyRoute
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/expenses'
     | '/music'
     | '/notebooks'
+    | '/pinterest'
     | '/sticky'
     | '/tasks'
     | '/auth/callback'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/expenses'
     | '/music'
     | '/notebooks'
+    | '/pinterest'
     | '/sticky'
     | '/tasks'
     | '/auth/callback'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/_authenticated/expenses'
     | '/_authenticated/music'
     | '/_authenticated/notebooks'
+    | '/_authenticated/pinterest'
     | '/_authenticated/sticky'
     | '/_authenticated/tasks'
     | '/auth/callback'
@@ -278,6 +290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedArchiveRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/pinterest': {
+      id: '/_authenticated/pinterest'
+      path: '/pinterest'
+      fullPath: '/pinterest'
+      preLoaderRoute: typeof AuthenticatedPinterestRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -288,6 +307,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExpensesRoute: typeof AuthenticatedExpensesRoute
   AuthenticatedMusicRoute: typeof AuthenticatedMusicRoute
   AuthenticatedNotebooksRoute: typeof AuthenticatedNotebooksRoute
+  AuthenticatedPinterestRoute: typeof AuthenticatedPinterestRoute
   AuthenticatedStickyRoute: typeof AuthenticatedStickyRoute
   AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
 }
@@ -299,6 +319,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExpensesRoute: AuthenticatedExpensesRoute,
   AuthenticatedMusicRoute: AuthenticatedMusicRoute,
   AuthenticatedNotebooksRoute: AuthenticatedNotebooksRoute,
+  AuthenticatedPinterestRoute: AuthenticatedPinterestRoute,
   AuthenticatedStickyRoute: AuthenticatedStickyRoute,
   AuthenticatedTasksRoute: AuthenticatedTasksRoute,
 }

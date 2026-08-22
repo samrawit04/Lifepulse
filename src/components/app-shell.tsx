@@ -14,8 +14,8 @@ import {
   Menu,
   Wallet,
   PanelLeftClose,
-  Sun,
-  Moon,
+  MoonStar,
+  SunMedium,
   Music,
   Loader2,
 } from "lucide-react";
@@ -30,6 +30,14 @@ import { NotificationBell } from "@/components/notification-bell";
 import { NotificationPoller } from "@/components/notification-poller";
 import { SidebarNotebookTree } from "@/components/sidebar-notebook-tree";
 
+function PinterestIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738.098.119.112.224.083.345-.09.375-.293 1.199-.334 1.367-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.541.535 6.627 0 12-5.373 12-12 0-6.628-5.373-12-12-12z" />
+    </svg>
+  );
+}
+
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/sticky", label: "Sticky Notes", icon: StickyNote },
@@ -38,6 +46,7 @@ const NAV = [
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/expenses", label: "Expenses", icon: Wallet },
   { to: "/music", label: "Music", icon: Music },
+  { to: "/pinterest", label: "Pinterest", icon: PinterestIcon },
   { to: "/archive", label: "Archive", icon: Archive },
 ] as const;
 
@@ -148,7 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="grid h-8 w-8 sm:h-9 sm:w-9 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-muted-foreground backdrop-blur-xl transition-all hover:bg-white/10 hover:text-foreground"
               title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
-              {theme === "dark" ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-emerald-600" />}
+              {theme === "dark" ? <SunMedium className="h-4 w-4 text-amber-400" /> : <MoonStar className="h-4 w-4 text-violet-400" />}
             </button>
             <NotificationBell />
             <img
@@ -183,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
               title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
-              {theme === "dark" ? <Sun className="h-3.5 w-3.5 text-amber-400" /> : <Moon className="h-3.5 w-3.5 text-emerald-600" />}
+              {theme === "dark" ? <SunMedium className="h-3.5 w-3.5 text-amber-400" /> : <MoonStar className="h-3.5 w-3.5 text-violet-400" />}
             </button>
             <NotificationBell />
             <button

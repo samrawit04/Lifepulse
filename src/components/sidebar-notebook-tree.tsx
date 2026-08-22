@@ -10,11 +10,35 @@ import {
   Plus,
   BookOpen,
   Trash2,
+  Pin,
+  PinOff,
 } from "lucide-react";
-import { useCreateFolder, useCreateItem, useDeleteFolder, useDeleteItem, useFolders, useItems } from "@/hooks/use-lifeos";
+import { useCreateFolder, useCreateItem, useDeleteFolder, useDeleteItem, useFolders, useItems, useUpdateItem } from "@/hooks/use-lifeos";
 import type { Folder as FolderType, Item } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const PINNED_FOLDERS_KEY = "lifepulse.pinned_folders";
+
+function usePinnedFolders() {
+  const [pinnedFolderIds, setPinnedFolderIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(PINNED_FOLDERS_KEY);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const togglePinFolder = (id: string) => {
+    setPinnedFolderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem(PINNED_FOLDERS_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  return { pinnedFolderIds, togglePinFolder };
+}
 
 interface SidebarNotebookTreeProps {
   currentPath: string;
@@ -27,7 +51,9 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
   const createItem = useCreateItem();
   const deleteFolder = useDeleteFolder();
   const deleteItem = useDeleteItem();
+  const updateItem = useUpdateItem();
   const navigate = useNavigate();
+  const { pinnedFolderIds, togglePinFolder } = usePinnedFolders();
 
   const routerSearch = useRouterState({
     select: (s) => (s.location.search as { folderId?: string; pageId?: string }) || {},
@@ -118,8 +144,23 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
 
   // Recursive tree rendering function
   const renderSubTree = (parentId: string | null, depth: number) => {
-    const childFolders = folders.filter((f) => (f.parent_folder_id ?? null) === parentId);
-    const childPages = notebookPages.filter((p) => (p.folder_id ?? null) === parentId);
+    const rawChildFolders = folders.filter((f) => (f.parent_folder_id ?? null) === parentId);
+    // Sort: pinned folders first, then alphabetical
+    const childFolders = [...rawChildFolders].sort((a, b) => {
+      const aPin = pinnedFolderIds.has(a.id) ? 0 : 1;
+      const bPin = pinnedFolderIds.has(b.id) ? 0 : 1;
+      if (aPin !== bPin) return aPin - bPin;
+      return a.name.localeCompare(b.name);
+    });
+
+    const rawChildPages = notebookPages.filter((p) => (p.folder_id ?? null) === parentId);
+    // Sort: pinned pages first, then by updated_at desc
+    const childPages = [...rawChildPages].sort((a, b) => {
+      const aPin = a.pinned ? 0 : 1;
+      const bPin = b.pinned ? 0 : 1;
+      if (aPin !== bPin) return aPin - bPin;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
 
     if (childFolders.length === 0 && childPages.length === 0) return null;
 
@@ -127,6 +168,7 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
       <div className="space-y-0.5">
         {childFolders.map((folder) => {
           const isExpanded = !!expandedFolders[folder.id];
+          const isPinned = pinnedFolderIds.has(folder.id);
           const hasChildren =
             folders.some((f) => f.parent_folder_id === folder.id) ||
             notebookPages.some((p) => p.folder_id === folder.id);
@@ -146,9 +188,10 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                   "group relative flex items-center gap-1.5 rounded-lg py-1.5 pr-2 text-xs font-medium transition-all cursor-pointer",
                   isFolderActive
                     ? "bg-white/10 text-foreground font-semibold shadow-sm border border-white/10"
-                    : "text-sidebar-foreground/80 hover:bg-white/[0.05] hover:text-foreground"
+                    : "text-sidebar-foreground/80 hover:bg-white/[0.05] hover:text-foreground",
+                  isPinned && "border-l-2 border-l-amber-400/60"
                 )}
-                style={{ paddingLeft: `${depth * 14 + 16}px` }}
+                style={{ paddingLeft: isPinned ? `${depth * 14 + 14}px` : `${depth * 14 + 16}px` }}
               >
                 {/* Expand / Collapse Chevron */}
                 <button
@@ -176,8 +219,25 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                 {/* Folder Label */}
                 <span className="truncate flex-1 text-xs">{folder.name}</span>
 
+                {/* Pinned badge (always visible when pinned) */}
+                {isPinned && (
+                  <Pin className="h-2.5 w-2.5 shrink-0 text-amber-400 fill-amber-400 opacity-70" />
+                )}
+
                 {/* Folder Actions on hover */}
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto shrink-0 transition-opacity">
+                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-1 shrink-0 transition-opacity">
+                  {/* Pin/Unpin folder */}
+                  <button
+                    type="button"
+                    title={isPinned ? "Unpin notebook" : "Pin notebook"}
+                    onClick={(e) => { e.stopPropagation(); togglePinFolder(folder.id); toast.success(isPinned ? "Notebook unpinned" : "Notebook pinned"); }}
+                    className={cn(
+                      "p-0.5 rounded hover:bg-white/10 transition-all",
+                      isPinned ? "text-amber-400" : "text-muted-foreground hover:text-amber-400"
+                    )}
+                  >
+                    {isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                  </button>
                   <button
                     type="button"
                     title="Add page inside notebook"
@@ -218,6 +278,7 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
         {/* Notebook pages at this level */}
         {childPages.map((page) => {
           const isPageActive = isNotebooksRoute && currentPageId === page.id;
+          const isPinned = page.pinned;
 
           return (
             <div key={page.id} className="select-none">
@@ -232,9 +293,10 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                   "group relative flex items-center gap-1.5 rounded-lg py-1.5 pr-2 text-xs font-medium transition-all cursor-pointer",
                   isPageActive
                     ? "bg-white/10 text-foreground font-semibold shadow-sm border border-white/10"
-                    : "text-sidebar-foreground/75 hover:bg-white/[0.05] hover:text-foreground"
+                    : "text-sidebar-foreground/75 hover:bg-white/[0.05] hover:text-foreground",
+                  isPinned && "border-l-2 border-l-primary/50"
                 )}
-                style={{ paddingLeft: `${depth * 14 + 16}px` }}
+                style={{ paddingLeft: isPinned ? `${depth * 14 + 14}px` : `${depth * 14 + 16}px` }}
               >
                 {/* Alignment spacer matching chevron width */}
                 <span className="w-4 shrink-0" />
@@ -250,27 +312,51 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                 {/* Page Title */}
                 <span className="truncate flex-1 text-xs">{page.title || "Untitled"}</span>
 
-                {/* Delete Page Action on hover */}
-                <button
-                  type="button"
-                  title="Delete page"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm(`Delete page "${page.title || "Untitled"}"?`)) {
-                      deleteItem.mutate(page.id, {
-                        onSuccess: () => {
-                          toast.success("Page deleted");
-                          if (currentPageId === page.id) {
-                            navigate({ to: "/notebooks", search: { folderId: page.folder_id ?? undefined } });
-                          }
-                        },
+                {/* Pinned badge */}
+                {isPinned && (
+                  <Pin className="h-2.5 w-2.5 shrink-0 text-primary fill-primary opacity-60" />
+                )}
+
+                {/* Page actions on hover */}
+                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-1 shrink-0 transition-opacity">
+                  {/* Pin/Unpin page */}
+                  <button
+                    type="button"
+                    title={isPinned ? "Unpin page" : "Pin page"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateItem.mutate({ id: page.id, patch: { pinned: !isPinned } }, {
+                        onSuccess: () => toast.success(isPinned ? "Page unpinned" : "Page pinned"),
                       });
-                    }
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all shrink-0 ml-auto"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                    }}
+                    className={cn(
+                      "p-0.5 rounded hover:bg-white/10 transition-all",
+                      isPinned ? "text-primary" : "text-muted-foreground hover:text-primary"
+                    )}
+                  >
+                    {isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete page"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Delete page "${page.title || "Untitled"}"?`)) {
+                        deleteItem.mutate(page.id, {
+                          onSuccess: () => {
+                            toast.success("Page deleted");
+                            if (currentPageId === page.id) {
+                              navigate({ to: "/notebooks", search: { folderId: page.folder_id ?? undefined } });
+                            }
+                          },
+                        });
+                      }
+                    }}
+                    className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           );

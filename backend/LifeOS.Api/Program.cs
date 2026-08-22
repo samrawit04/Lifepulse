@@ -13,6 +13,7 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // ── Services ──────────────────────────────────────────────────────────────────
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<GoogleAuthService>();
 

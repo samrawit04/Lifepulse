@@ -29,6 +29,8 @@ import {
   PlusCircle,
   Minus,
   SwitchCamera,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import {
   useCreateFolder,
@@ -162,6 +164,22 @@ function Notebooks() {
   const [selectedPage, setSelectedPage] = useState<Item | null>(null);
   const [newName, setNewName] = useState("");
 
+  // ── Pinned folders (localStorage) ──────────────────────────────────────────
+  const [pinnedFolderIds, setPinnedFolderIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem("lifepulse.pinned_folders");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const togglePinFolder = (id: string) => {
+    setPinnedFolderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem("lifepulse.pinned_folders", JSON.stringify([...next]));
+      return next;
+    });
+  };
+
   const search = Route.useSearch();
 
   useEffect(() => {
@@ -191,8 +209,16 @@ function Notebooks() {
   const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null);
 
   const currentFolders = useMemo(
-    () => folders.filter((f) => (f.parent_folder_id ?? null) === selectedFolderId),
-    [folders, selectedFolderId]
+    () => {
+      const raw = folders.filter((f) => (f.parent_folder_id ?? null) === selectedFolderId);
+      return [...raw].sort((a, b) => {
+        const aPin = pinnedFolderIds.has(a.id) ? 0 : 1;
+        const bPin = pinnedFolderIds.has(b.id) ? 0 : 1;
+        if (aPin !== bPin) return aPin - bPin;
+        return a.name.localeCompare(b.name);
+      });
+    },
+    [folders, selectedFolderId, pinnedFolderIds]
   );
 
   const pages = useMemo(
@@ -204,7 +230,12 @@ function Notebooks() {
             !i.archived &&
             (i.folder_id ?? null) === selectedFolderId
         )
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
+        .sort((a, b) => {
+          const aPin = a.pinned ? 0 : 1;
+          const bPin = b.pinned ? 0 : 1;
+          if (aPin !== bPin) return aPin - bPin;
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        }),
     [items, selectedFolderId]
   );
 
@@ -418,6 +449,8 @@ function Notebooks() {
                         key={folder.id}
                         folder={folder}
                         colorAccent={NOTEBOOK_COLORS[idx % NOTEBOOK_COLORS.length]}
+                        isPinned={pinnedFolderIds.has(folder.id)}
+                        onPin={() => togglePinFolder(folder.id)}
                         onClick={() => setSelectedFolderId(folder.id)}
                         onRename={() => { setRenameFolderId(folder.id); setRenameFolderName(folder.name); }}
                         onDelete={() => setDeleteFolderId(folder.id)}
@@ -465,7 +498,12 @@ function Notebooks() {
                     <div className="absolute left-[22px] top-0 bottom-0 w-px bg-gradient-to-b from-primary/30 via-primary/10 to-transparent hidden sm:block" />
                     <div className="space-y-3">
                       {pages.map((p) => (
-                        <PageCard key={p.id} page={p} onClick={() => setSelectedPage(p)} />
+                        <PageCard
+                          key={p.id}
+                          page={p}
+                          onClick={() => setSelectedPage(p)}
+                          onPinToggle={() => updateItem.mutate({ id: p.id, patch: { pinned: !p.pinned } }, { onSuccess: () => toast.success(p.pinned ? "Page unpinned" : "Page pinned") })}
+                        />
                       ))}
                     </div>
                   </div>
@@ -525,22 +563,42 @@ function Notebooks() {
 
 // ─── Notebook Card ─────────────────────────────────────────────────────────────
 
-function NotebookCard({ folder, colorAccent, onClick, onRename, onDelete, pageCount }: {
-  folder: Folder; colorAccent: string; onClick: () => void; onRename: () => void; onDelete: () => void; pageCount: number;
+function NotebookCard({ folder, colorAccent, isPinned, onPin, onClick, onRename, onDelete, pageCount }: {
+  folder: Folder; colorAccent: string; isPinned: boolean; onPin: () => void; onClick: () => void; onRename: () => void; onDelete: () => void; pageCount: number;
 }) {
   return (
     <div
       onClick={onClick}
-      className="group relative flex flex-col gap-2 p-4 rounded-2xl cursor-pointer transition-all duration-300 bg-card/50 border border-white/[0.06] hover:border-white/[0.14] hover:bg-card hover:shadow-note overflow-hidden"
+      className={cn(
+        "group relative flex flex-col gap-2 p-4 rounded-2xl cursor-pointer transition-all duration-300 bg-card/50 border border-white/[0.06] hover:border-white/[0.14] hover:bg-card hover:shadow-note overflow-hidden",
+        isPinned && "ring-1 ring-amber-400/30 border-amber-400/20"
+      )}
     >
       <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl" style={{ background: colorAccent }} />
+      {isPinned && (
+        <div className="absolute top-2.5 right-2.5">
+          <Pin className="h-3 w-3 text-amber-400 fill-amber-400 opacity-70" />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2 pl-3">
         <div>
           <p className="text-lg mb-0.5">📓</p>
           <h3 className="font-display font-semibold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-2">{folder.name}</h3>
           <p className="text-[10px] text-muted-foreground mt-0.5">{pageCount} {pageCount === 1 ? "page" : "pages"}</p>
         </div>
-        <div className="flex opacity-0 group-hover:opacity-100 transition-opacity gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex opacity-0 group-hover:opacity-100 transition-opacity gap-0.5 shrink-0 mr-3" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onPin}
+            title={isPinned ? "Unpin notebook" : "Pin notebook"}
+            className={cn(
+              "rounded-lg p-1.5 transition-colors",
+              isPinned
+                ? "text-amber-400 hover:bg-amber-400/10"
+                : "text-muted-foreground hover:bg-white/10 hover:text-amber-400"
+            )}
+          >
+            {isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+          </button>
           <button onClick={onRename} className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground transition-colors"><Pencil className="h-3 w-3" /></button>
           <button onClick={onDelete} className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors"><Trash2 className="h-3 w-3" /></button>
         </div>
@@ -551,14 +609,22 @@ function NotebookCard({ folder, colorAccent, onClick, onRename, onDelete, pageCo
 
 // ─── Page Card ─────────────────────────────────────────────────────────────────
 
-function PageCard({ page, onClick }: { page: Item; onClick: () => void }) {
+function PageCard({ page, onClick, onPinToggle }: { page: Item; onClick: () => void; onPinToggle: () => void }) {
   const preview = useMemo(() => blockPreview(page.content), [page.content]);
 
   return (
     <button
       onClick={onClick}
-      className="group relative flex items-start gap-4 text-left w-full p-4 rounded-2xl bg-card/40 border border-white/[0.05] hover:bg-card/70 hover:border-white/[0.12] hover:shadow-note transition-all duration-300"
+      className={cn(
+        "group relative flex items-start gap-4 text-left w-full p-4 rounded-2xl bg-card/40 border border-white/[0.05] hover:bg-card/70 hover:border-white/[0.12] hover:shadow-note transition-all duration-300",
+        page.pinned && "ring-1 ring-primary/20 border-primary/10"
+      )}
     >
+      {page.pinned && (
+        <div className="absolute top-2.5 right-2.5">
+          <Pin className="h-3 w-3 text-primary fill-primary opacity-50" />
+        </div>
+      )}
       <div className="hidden sm:flex flex-col items-center gap-1 shrink-0 pt-1">
         <div className="h-4 w-4 rounded-full border-2 border-primary/40 bg-background group-hover:border-primary group-hover:bg-primary/20 transition-all flex items-center justify-center">
           <div className="h-1 w-1 rounded-full bg-primary/60 group-hover:bg-primary" />
@@ -567,11 +633,27 @@ function PageCard({ page, onClick }: { page: Item; onClick: () => void }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-1">
           <span className="text-[10px] text-muted-foreground/50 font-medium">{formatDateLabel(page.updated_at)}</span>
-          {preview.mediaCount > 0 && (
-            <span className="text-[10px] text-muted-foreground/40 flex items-center gap-0.5">
-              <Paperclip className="h-2.5 w-2.5" />{preview.mediaCount}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {preview.mediaCount > 0 && (
+              <span className="text-[10px] text-muted-foreground/40 flex items-center gap-0.5">
+                <Paperclip className="h-2.5 w-2.5" />{preview.mediaCount}
+              </span>
+            )}
+            {/* Pin toggle button */}
+            <button
+              type="button"
+              title={page.pinned ? "Unpin page" : "Pin page"}
+              onClick={(e) => { e.stopPropagation(); onPinToggle(); }}
+              className={cn(
+                "p-0.5 rounded transition-all opacity-0 group-hover:opacity-100",
+                page.pinned
+                  ? "text-primary opacity-100 hover:text-primary/60"
+                  : "text-muted-foreground hover:text-primary"
+              )}
+            >
+              {page.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+            </button>
+          </div>
         </div>
         <h3 className="font-display font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate">{page.title || "Untitled"}</h3>
         <div className="flex gap-3 items-start mt-1">
