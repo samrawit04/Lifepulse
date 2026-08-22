@@ -124,6 +124,16 @@ export function noteColorCss(color: string | null | undefined): string {
   return noteColor(color).from;
 }
 
+/** Ultra-light subtle atmospheric mood wash for full-screen notebook pages. */
+export function notebookPageBackground(color: string | null | undefined): string | undefined {
+  if (!color) return undefined;
+  const c = NOTE_COLORS.find((x) => x.value === color);
+  if (!c) return undefined;
+  const fromTint = c.from.replace(")", " / 0.08)");
+  const toTint = c.to.replace(")", " / 0.02)");
+  return `radial-gradient(ellipse 100% 60% at 50% 0%, ${fromTint}, ${toTint} 60%, transparent 100%)`;
+}
+
 export const PRIORITIES = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },

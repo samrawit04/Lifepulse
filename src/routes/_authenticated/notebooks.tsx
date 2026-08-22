@@ -44,7 +44,7 @@ import {
   useUpdateItem,
 } from "@/hooks/use-lifeos";
 import type { Folder, Item } from "@/lib/lifeos-types";
-import { NOTE_COLORS, noteGradient } from "@/lib/lifeos-types";
+import { NOTE_COLORS, notebookPageBackground } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1085,16 +1085,16 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
     return result;
   }, [blocks]);
 
-  // Derive background style from current color
-  const editorBg = pageColor ? noteGradient(pageColor) : undefined;
+  // Derive ultra-light subtle atmospheric mood wash
+  const editorBg = pageColor ? notebookPageBackground(pageColor) : undefined;
 
   return (
     <>
       <div className="flex flex-col h-full overflow-hidden">
         {/* ── Scrollable writing area ── */}
         <div
-          className="flex-1 overflow-auto min-h-0 relative transition-colors duration-500"
-          style={editorBg ? { background: editorBg } : undefined}
+          className="flex-1 overflow-auto min-h-0 relative transition-all duration-500"
+          style={editorBg ? { backgroundImage: editorBg } : undefined}
           onPaste={handlePaste}
         >
           {/* Paste hint toast */}
@@ -1109,10 +1109,7 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
               onChange={(e) => handleTitleChange(e.target.value)}
               onBlur={() => save()}
               placeholder="Title"
-              className={cn(
-                "w-full bg-transparent font-display text-2xl sm:text-3xl font-semibold placeholder:text-muted-foreground/25 focus:outline-none leading-tight",
-                pageColor ? "text-foreground/90" : "text-foreground"
-              )}
+              className="w-full bg-transparent font-display text-2xl sm:text-3xl font-semibold text-foreground placeholder:text-muted-foreground/25 focus:outline-none leading-tight"
             />
             <p className="text-[10px] text-muted-foreground/40 mt-1 mb-4 font-medium tracking-wider uppercase">
               {format(new Date(page.updated_at), "EEEE, MMM d · yyyy")}
