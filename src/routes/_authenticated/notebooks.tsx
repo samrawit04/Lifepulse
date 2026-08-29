@@ -1105,7 +1105,7 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
         {/* ── Scrollable writing area ── */}
         <div
           className="flex-1 overflow-auto min-h-0 relative transition-all duration-500"
-          style={editorBg ? { backgroundImage: editorBg } : undefined}
+          style={editorBg}
           onPaste={handlePaste}
         >
           {/* Paste hint toast */}

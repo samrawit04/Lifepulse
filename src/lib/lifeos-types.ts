@@ -125,13 +125,17 @@ export function noteColorCss(color: string | null | undefined): string {
 }
 
 /** Ultra-light subtle atmospheric mood wash for full-screen notebook pages. */
-export function notebookPageBackground(color: string | null | undefined): string | undefined {
+export function notebookPageBackground(color: string | null | undefined): Record<string, string> | undefined {
   if (!color) return undefined;
   const c = NOTE_COLORS.find((x) => x.value === color);
   if (!c) return undefined;
-  const fromTint = c.from.replace(")", " / 0.08)");
-  const toTint = c.to.replace(")", " / 0.02)");
-  return `radial-gradient(ellipse 100% 60% at 50% 0%, ${fromTint}, ${toTint} 60%, transparent 100%)`;
+  const fromTint = c.from.replace(")", " / 0.42)");
+  const toTint = c.to.replace(")", " / 0.18)");
+  const baseColor = c.from.replace(")", " / 0.15)");
+  return {
+    backgroundColor: baseColor,
+    backgroundImage: `radial-gradient(ellipse 140% 95% at 50% -10%, ${fromTint} 0%, ${toTint} 75%, transparent 100%)`,
+  };
 }
 
 export const PRIORITIES = [
