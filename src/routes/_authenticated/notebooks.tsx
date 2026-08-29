@@ -710,6 +710,11 @@ function PageCard({ page, onClick, onPinToggle }: { page: Item; onClick: () => v
 
 // ─── Note Editor (block-based) ─────────────────────────────────────────────────
 
+type ActiveInput =
+  | { type: "title"; element: HTMLInputElement | HTMLTextAreaElement }
+  | { type: "text"; element: HTMLTextAreaElement; blockId: string }
+  | { type: "table"; element: HTMLInputElement | HTMLTextAreaElement; tableId: string; row: number; col: number };
+
 function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
   page: Item; onClose: () => void; onChange: (p: Partial<Item>) => void; onArchive: () => void; onDelete: () => void;
 }) {
@@ -726,6 +731,7 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
   const activeBlockIdRef = useRef<string | null>(null);
   const focusPendingRef = useRef<string | null>(null);
   const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeInputRef = useRef<ActiveInput | null>(null);
   const [pasteHint, setPasteHint] = useState<string | null>(null);
 
   // Synchronous references for auto-save and unmount persistence
@@ -1020,30 +1026,35 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
 
   const insertEmoji = useCallback((emoji: string) => {
     setShowEmojiPicker(false);
-    const ta = activeTextareaRef.current;
-    if (ta) {
-      const start = ta.selectionStart ?? ta.value.length;
-      const end = ta.selectionEnd ?? ta.value.length;
-      const id = activeBlockIdRef.current;
-      if (id) {
-        setBlocks((prev) => prev.map((b) => {
-          if (b.id !== id || b.kind !== "text") return b;
-          const next = b.content.slice(0, start) + emoji + b.content.slice(end);
-          return { ...b, content: next };
-        }));
-        setTimeout(() => {
-          ta.focus();
-          const pos = start + emoji.length;
-          ta.setSelectionRange(pos, pos);
-        }, 10);
-      }
-    } else {
-      const id = activeBlockIdRef.current;
-      if (id) {
-        setBlocks((prev) => prev.map((b) => b.id === id && b.kind === "text" ? { ...b, content: b.content + emoji } : b));
-      }
+    const active = activeInputRef.current;
+    if (!active || !active.element) {
+      // Fallback: append emoji to title
+      handleTitleChange((titleRef.current || "") + emoji);
+      return;
     }
-  }, []);
+
+    const el = active.element;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const val = el.value || "";
+    const nextVal = val.slice(0, start) + emoji + val.slice(end);
+
+    if (active.type === "title") {
+      handleTitleChange(nextVal);
+    } else if (active.type === "table" && active.tableId && active.row !== undefined && active.col !== undefined) {
+      updateTableCell(active.tableId, active.row, active.col, nextVal);
+    } else if (active.type === "text" && active.blockId) {
+      updateText(active.blockId, nextVal);
+    }
+
+    setTimeout(() => {
+      try {
+        el.focus();
+        const newPos = start + emoji.length;
+        el.setSelectionRange(newPos, newPos);
+      } catch {}
+    }, 20);
+  }, [handleTitleChange, updateTableCell, updateText]);
 
   type BlockGroup =
     | { kind: "single"; block: Block }
@@ -1107,6 +1118,9 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
             <input
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
+              onFocus={(e) => {
+                activeInputRef.current = { type: "title", element: e.target };
+              }}
               onBlur={() => save()}
               placeholder="Title"
               className="w-full bg-transparent font-display text-2xl sm:text-3xl font-semibold text-foreground placeholder:text-muted-foreground/25 focus:outline-none leading-tight"
@@ -1148,7 +1162,11 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
                     value={block.content}
                     placeholder={showPlaceholder ? (isFirstGroup ? "Start writing…" : "Continue writing…") : ""}
                     onChange={(val) => updateText(block.id, val)}
-                    onFocus={(ta) => { activeBlockIdRef.current = block.id; activeTextareaRef.current = ta; }}
+                    onFocus={(ta) => {
+                      activeBlockIdRef.current = block.id;
+                      activeTextareaRef.current = ta;
+                      activeInputRef.current = { type: "text", element: ta, blockId: block.id };
+                    }}
                     onBlur={() => save()}
                     onPaste={handlePaste}
                     onRemoveEmpty={blocks.length > 1 ? () => removeBlock(block.id) : undefined}
@@ -1161,6 +1179,9 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
                     <TableEditor
                       block={block}
                       onCellChange={(r, c, v) => updateTableCell(block.id, r, c, v)}
+                      onCellFocus={(r, c, el) => {
+                        activeInputRef.current = { type: "table", element: el, tableId: block.id, row: r, col: c };
+                      }}
                       onCellBlur={() => save()}
                       onAddRow={() => addTableRow(block.id)}
                       onAddCol={() => addTableCol(block.id)}
@@ -1834,9 +1855,10 @@ function EmptyState({ icon, title, description, action }: { icon: React.ReactNod
 
 // ─── Table Editor ──────────────────────────────────────────────────────────────
 
-function TableEditor({ block, onCellChange, onCellBlur, onAddRow, onAddCol, onRemoveRow, onRemoveCol, onRemove }: {
+function TableEditor({ block, onCellChange, onCellFocus, onCellBlur, onAddRow, onAddCol, onRemoveRow, onRemoveCol, onRemove }: {
   block: TableBlock;
   onCellChange: (row: number, col: number, value: string) => void;
+  onCellFocus?: (row: number, col: number, el: HTMLInputElement) => void;
   onCellBlur: () => void;
   onAddRow: () => void;
   onAddCol: () => void;
@@ -1886,6 +1908,7 @@ function TableEditor({ block, onCellChange, onCellBlur, onAddRow, onAddCol, onRe
                   <input
                     value={cell}
                     onChange={(e) => onCellChange(ri, ci, e.target.value)}
+                    onFocus={(e) => onCellFocus?.(ri, ci, e.target)}
                     onBlur={onCellBlur}
                     className={cn(
                       "w-full min-w-[80px] px-2.5 py-2 text-sm bg-transparent text-foreground/85 focus:outline-none focus:bg-primary/5 transition-colors",
