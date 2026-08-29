@@ -16,6 +16,7 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<GoogleAuthService>();
+builder.Services.AddHostedService<AutoBackupService>();
 
 // ── Controllers + JSON ────────────────────────────────────────────────────────
 builder.Services.AddControllers()

@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "db:backup": "powershell -ExecutionPolicy Bypass -File ./backup-db.ps1",
+    "db:backup:watch": "powershell -ExecutionPolicy Bypass -File ./backup-db.ps1 -Continuous -IntervalMinutes 60"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
