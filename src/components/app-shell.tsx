@@ -14,8 +14,7 @@ import {
   Menu,
   Wallet,
   PanelLeftClose,
-  MoonStar,
-  SunMedium,
+  Lightbulb,
   Music,
   Loader2,
 } from "lucide-react";
@@ -157,7 +156,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="grid h-8 w-8 sm:h-9 sm:w-9 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-muted-foreground backdrop-blur-xl transition-all hover:bg-white/10 hover:text-foreground"
               title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
-              {theme === "dark" ? <SunMedium className="h-4 w-4 text-amber-400" /> : <MoonStar className="h-4 w-4 text-violet-400" />}
+              <Lightbulb
+                className={cn(
+                  "h-4 w-4 transition-all duration-300",
+                  theme === "dark"
+                    ? "text-white fill-white/20 drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]"
+                    : "text-slate-900 fill-slate-900/10 drop-shadow-sm",
+                )}
+              />
             </button>
             <NotificationBell />
             <img
@@ -192,7 +198,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
               title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
-              {theme === "dark" ? <SunMedium className="h-3.5 w-3.5 text-amber-400" /> : <MoonStar className="h-3.5 w-3.5 text-violet-400" />}
+              <Lightbulb
+                className={cn(
+                  "h-4 w-4 transition-all duration-300",
+                  theme === "dark"
+                    ? "text-white fill-white/20 drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]"
+                    : "text-slate-900 fill-slate-900/10 drop-shadow-sm",
+                )}
+              />
             </button>
             <NotificationBell />
             <button

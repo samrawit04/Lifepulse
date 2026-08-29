@@ -16,13 +16,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
 import { Route as AuthenticatedStickyRouteImport } from './routes/_authenticated/sticky'
+import { Route as AuthenticatedPinterestRouteImport } from './routes/_authenticated/pinterest'
 import { Route as AuthenticatedNotebooksRouteImport } from './routes/_authenticated/notebooks'
 import { Route as AuthenticatedMusicRouteImport } from './routes/_authenticated/music'
 import { Route as AuthenticatedExpensesRouteImport } from './routes/_authenticated/expenses'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedArchiveRouteImport } from './routes/_authenticated/archive'
-import { Route as AuthenticatedPinterestRouteImport } from './routes/_authenticated/pinterest'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -58,6 +58,11 @@ const AuthenticatedStickyRoute = AuthenticatedStickyRouteImport.update({
   path: '/sticky',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPinterestRoute = AuthenticatedPinterestRouteImport.update({
+  id: '/pinterest',
+  path: '/pinterest',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedNotebooksRoute = AuthenticatedNotebooksRouteImport.update({
   id: '/notebooks',
   path: '/notebooks',
@@ -86,11 +91,6 @@ const AuthenticatedCalendarRoute = AuthenticatedCalendarRouteImport.update({
 const AuthenticatedArchiveRoute = AuthenticatedArchiveRouteImport.update({
   id: '/archive',
   path: '/archive',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedPinterestRoute = AuthenticatedPinterestRouteImport.update({
-  id: '/pinterest',
-  path: '/pinterest',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
@@ -248,6 +248,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStickyRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/pinterest': {
+      id: '/_authenticated/pinterest'
+      path: '/pinterest'
+      fullPath: '/pinterest'
+      preLoaderRoute: typeof AuthenticatedPinterestRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/notebooks': {
       id: '/_authenticated/notebooks'
       path: '/notebooks'
@@ -288,13 +295,6 @@ declare module '@tanstack/react-router' {
       path: '/archive'
       fullPath: '/archive'
       preLoaderRoute: typeof AuthenticatedArchiveRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/pinterest': {
-      id: '/_authenticated/pinterest'
-      path: '/pinterest'
-      fullPath: '/pinterest'
-      preLoaderRoute: typeof AuthenticatedPinterestRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }

@@ -17,6 +17,7 @@ import { useCreateFolder, useCreateItem, useDeleteFolder, useDeleteItem, useFold
 import type { Folder as FolderType, Item } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 const PINNED_FOLDERS_KEY = "lifepulse.pinned_folders";
 
@@ -67,6 +68,14 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
 
   // Map of expanded folder IDs
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+
+  // Target item for custom popup confirmation dialog
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    name: string;
+    type: "folder" | "page";
+    folderId?: string | null;
+  } | null>(null);
 
   const isNotebooksRoute = currentPath === "/notebooks" || currentPath.startsWith("/notebooks");
 
@@ -249,16 +258,7 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                     title="Delete notebook"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm(`Delete notebook "${folder.name}" and all its pages?`)) {
-                        deleteFolder.mutate(folder.id, {
-                          onSuccess: () => {
-                            toast.success("Notebook deleted");
-                            if (currentFolderId === folder.id) {
-                              navigate({ to: "/notebooks" });
-                            }
-                          },
-                        });
-                      }
+                      setDeleteTarget({ id: folder.id, name: folder.name, type: "folder" });
                     }}
                     className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
                   >
@@ -339,16 +339,12 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                     title="Delete page"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm(`Delete page "${page.title || "Untitled"}"?`)) {
-                        deleteItem.mutate(page.id, {
-                          onSuccess: () => {
-                            toast.success("Page deleted");
-                            if (currentPageId === page.id) {
-                              navigate({ to: "/notebooks", search: { folderId: page.folder_id ?? undefined } });
-                            }
-                          },
-                        });
-                      }
+                      setDeleteTarget({
+                        id: page.id,
+                        name: page.title || "Untitled",
+                        type: "page",
+                        folderId: page.folder_id,
+                      });
                     }}
                     className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
                   >
@@ -418,6 +414,50 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
           {renderSubTree(null, 0)}
         </div>
       )}
+
+      {/* App Custom Popup Delete Confirmation Dialog */}
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={
+          deleteTarget?.type === "folder"
+            ? `Delete notebook "${deleteTarget.name}"?`
+            : `Delete page "${deleteTarget?.name}"?`
+        }
+        description={
+          deleteTarget?.type === "folder"
+            ? "This will delete the notebook and all of its pages. This action cannot be undone."
+            : "This notebook page will be permanently deleted."
+        }
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          if (deleteTarget.type === "folder") {
+            const folderId = deleteTarget.id;
+            deleteFolder.mutate(folderId, {
+              onSuccess: () => {
+                toast.success("Notebook deleted");
+                if (currentFolderId === folderId) {
+                  navigate({ to: "/notebooks" });
+                }
+              },
+            });
+          } else {
+            const pageId = deleteTarget.id;
+            const folderId = deleteTarget.folderId;
+            deleteItem.mutate(pageId, {
+              onSuccess: () => {
+                toast.success("Page deleted");
+                if (currentPageId === pageId) {
+                  navigate({ to: "/notebooks", search: { folderId: folderId ?? undefined } });
+                }
+              },
+            });
+          }
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }
