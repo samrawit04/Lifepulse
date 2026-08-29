@@ -1867,9 +1867,9 @@ function TableEditor({ block, onCellChange, onCellFocus, onCellBlur, onAddRow, o
   onRemove: () => void;
 }) {
   return (
-    <div className="group relative rounded-xl border border-white/[0.10] bg-white/[0.03] overflow-x-auto">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.07] bg-white/[0.02]">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-1.5">
+    <div className="group relative rounded-xl border border-black/15 bg-black/[0.02] dark:border-white/[0.12] dark:bg-white/[0.03] overflow-x-auto shadow-sm">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-black/10 bg-black/[0.03] dark:border-white/[0.08] dark:bg-white/[0.02]">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 flex items-center gap-1.5">
           <Table2 className="h-3 w-3" /> Table
         </span>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1894,7 +1894,7 @@ function TableEditor({ block, onCellChange, onCellFocus, onCellBlur, onAddRow, o
         <thead>
           <tr>
             {block.rows[0]?.map((_, ci) => (
-              <th key={ci} className="border border-white/[0.08] px-1 py-0.5 bg-white/[0.04] text-[10px] text-muted-foreground/50 font-medium text-center w-8 select-none">
+              <th key={ci} className="border border-black/10 bg-black/[0.04] text-[10px] text-muted-foreground/70 font-medium text-center w-8 select-none dark:border-white/[0.09] dark:bg-white/[0.04]">
                 {String.fromCharCode(65 + ci)}
               </th>
             ))}
@@ -1904,15 +1904,15 @@ function TableEditor({ block, onCellChange, onCellFocus, onCellBlur, onAddRow, o
           {block.rows.map((row, ri) => (
             <tr key={ri} className="group/row">
               {row.map((cell, ci) => (
-                <td key={ci} className="border border-white/[0.08] p-0 relative">
+                <td key={ci} className="border border-black/10 dark:border-white/[0.09] p-0 relative">
                   <input
                     value={cell}
                     onChange={(e) => onCellChange(ri, ci, e.target.value)}
                     onFocus={(e) => onCellFocus?.(ri, ci, e.target)}
                     onBlur={onCellBlur}
                     className={cn(
-                      "w-full min-w-[80px] px-2.5 py-2 text-sm bg-transparent text-foreground/85 focus:outline-none focus:bg-primary/5 transition-colors",
-                      ri === 0 && "font-semibold text-foreground"
+                      "w-full min-w-[80px] px-2.5 py-2 text-sm bg-transparent text-foreground focus:outline-none focus:bg-primary/10 transition-colors",
+                      ri === 0 && "font-semibold text-foreground bg-black/[0.02] dark:bg-white/[0.02]"
                     )}
                     placeholder={ri === 0 ? `Header ${ci + 1}` : ""}
                   />
