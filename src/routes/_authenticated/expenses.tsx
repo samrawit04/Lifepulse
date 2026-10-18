@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { 
   format, startOfMonth, isSameMonth, subMonths,
   startOfDay, endOfDay, startOfWeek, endOfWeek,
-  isWithinInterval, eachDayOfInterval, subDays
+  isWithinInterval, eachDayOfInterval, subDays, isToday, isYesterday
 } from "date-fns";
 import { Wallet, Plus, Trash2, TrendingUp, TrendingDown, Calendar, CheckSquare, Sparkles, Pencil, ArrowRight, Tag, Percent, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -132,7 +132,14 @@ function ExpensesPage() {
 
   const totalToday = useMemo(() => {
     return todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  }, [todayExpenses]);
+  }, [todayExpenses]);
+
+  // Recent expenses across all dates (shows past history at a glance so user knows data is safe)
+  const recentExpenses = useMemo(() => {
+    return [...expenses]
+      .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())
+      .slice(0, 8);
+  }, [expenses]);
 
   // Actual current month totals for budget pacing (against the full calendar month)
   const thisMonthExpenses = useMemo(() => {
@@ -578,6 +585,63 @@ function ExpensesPage() {
                   </li>
                 ))}
               </ul>
+            )}
+
+            {/* Recent History Section so the page never looks empty and past data is readily visible */}
+            {recentExpenses.length > 0 && (
+              <div className="pt-4 border-t border-white/5 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <h3 className="font-display text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Recent History
+                  </h3>
+                  <span className="text-[10px] text-muted-foreground/70">
+                    All-time saved: {expenses.length}
+                  </span>
+                </div>
+                <ul className="divide-y divide-white/5 max-h-56 overflow-y-auto pr-1">
+                  {recentExpenses.map((e) => {
+                    const itemDate = new Date(e.occurred_at);
+                    const dateTag = isToday(itemDate)
+                      ? "Today"
+                      : isYesterday(itemDate)
+                      ? "Yesterday"
+                      : format(itemDate, "MMM d");
+                    return (
+                      <li key={e.id} className="group flex items-center justify-between gap-3 py-2 text-xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/[0.04] text-xs">
+                            {categoryEmoji(e.category)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-xs text-foreground">
+                              {e.note || e.category}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                              <span className="font-semibold text-primary/80">{dateTag}</span>
+                              <span>·</span>
+                              <span>{e.category}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-display font-semibold text-xs text-foreground font-sans">
+                            {Number(e.amount).toFixed(2)} {CURRENCY}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteExpenseId(e.id)}
+                            disabled={del.isPending}
+                            className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition cursor-pointer"
+                            title="Delete expense"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
           </div>
         </div>

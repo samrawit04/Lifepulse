@@ -34,7 +34,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
-import { format, isBefore, isToday, startOfDay } from "date-fns";
+import { format, isAfter, isBefore, isToday, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
@@ -75,13 +75,27 @@ function TasksPage() {
   const backlogTasks = useMemo(
     () =>
       tasks
-        .filter((t) => !t.completed && (!t.due_date || !isToday(new Date(t.due_date))))
+        .filter((t) => {
+          if (t.completed) return false;
+          if (!t.due_date) return true;
+          const due = startOfDay(new Date(t.due_date));
+          const today = startOfDay(new Date());
+          return isAfter(due, today);
+        })
         .sort(sortByDue),
     [tasks]
   );
 
   const todayTasks = useMemo(
-    () => tasks.filter((t) => !t.completed && t.due_date && isToday(new Date(t.due_date))).sort(sortByDue),
+    () =>
+      tasks
+        .filter((t) => {
+          if (t.completed || !t.due_date) return false;
+          const due = startOfDay(new Date(t.due_date));
+          const today = startOfDay(new Date());
+          return isToday(new Date(t.due_date)) || isBefore(due, today);
+        })
+        .sort(sortByDue),
     [tasks]
   );
 
@@ -288,7 +302,7 @@ function TasksPage() {
 
             <KanbanColumn
               columnId="today"
-              title="Today's Focus"
+              title="Today & Overdue"
               icon={<CalendarDays className="h-4 w-4 text-primary" />}
               tasks={todayTasks}
               folders={folders}
@@ -335,7 +349,7 @@ function TasksPage() {
             {todayTasks.length > 0 && (
               <div>
                 <h2 className="mb-2 text-sm font-semibold text-primary flex items-center gap-1.5">
-                  <CalendarDays className="h-4 w-4" /> Today ({todayTasks.length})
+                  <CalendarDays className="h-4 w-4" /> Today & Overdue ({todayTasks.length})
                 </h2>
                 <div className="space-y-2">
                   {todayTasks.map((t) => (

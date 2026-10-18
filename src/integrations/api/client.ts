@@ -84,7 +84,7 @@ class ApiClient {
 
   private get token() {
     if (typeof window !== "undefined") {
-      return sessionStorage.getItem("lifepulse_jwt");
+      return localStorage.getItem("lifepulse_jwt") || sessionStorage.getItem("lifepulse_jwt");
     }
     return null;
   }
@@ -109,6 +109,7 @@ class ApiClient {
 
     if (response.status === 401) {
       if (typeof window !== "undefined") {
+        localStorage.removeItem("lifepulse_jwt");
         sessionStorage.removeItem("lifepulse_jwt");
       }
     }
@@ -153,7 +154,8 @@ class ApiClient {
       const payload = typeof emailOrData === "string" ? { email: emailOrData, password } : emailOrData;
       const res = await this.post<AuthResponse>("/api/auth/login", payload);
       if (typeof window !== "undefined") {
-        sessionStorage.setItem("lifepulse_jwt", res.token);
+        localStorage.setItem("lifepulse_jwt", res.token);
+        sessionStorage.removeItem("lifepulse_jwt");
       }
       return res;
     },
@@ -162,7 +164,8 @@ class ApiClient {
       const payload = typeof emailOrData === "string" ? { email: emailOrData, password } : emailOrData;
       const res = await this.post<AuthResponse>("/api/auth/register", payload);
       if (typeof window !== "undefined") {
-        sessionStorage.setItem("lifepulse_jwt", res.token);
+        localStorage.setItem("lifepulse_jwt", res.token);
+        sessionStorage.removeItem("lifepulse_jwt");
       }
       return res;
     },
@@ -178,13 +181,15 @@ class ApiClient {
     signInWithGoogleCredential: async (credential: string): Promise<AuthResponse> => {
       const res = await this.post<AuthResponse>("/api/auth/google", { credential });
       if (typeof window !== "undefined") {
-        sessionStorage.setItem("lifepulse_jwt", res.token);
+        localStorage.setItem("lifepulse_jwt", res.token);
+        sessionStorage.removeItem("lifepulse_jwt");
       }
       return res;
     },
 
     signOut: async (): Promise<void> => {
       if (typeof window !== "undefined") {
+        localStorage.removeItem("lifepulse_jwt");
         sessionStorage.removeItem("lifepulse_jwt");
       }
     },
@@ -200,7 +205,8 @@ class ApiClient {
 
     setSessionToken: (token: string): void => {
       if (typeof window !== "undefined") {
-        sessionStorage.setItem("lifepulse_jwt", token);
+        localStorage.setItem("lifepulse_jwt", token);
+        sessionStorage.removeItem("lifepulse_jwt");
         window.dispatchEvent(new CustomEvent("lifepulse-auth-change", { detail: { token } }));
       }
     },
