@@ -35,6 +35,9 @@ public class ItemsController(AppDbContext db) : ControllerBase
         if (!Enum.TryParse<ItemType>(ToPascalCase(req.Type), out var itemType))
             return BadRequest(new { message = $"Invalid item type: {req.Type}" });
 
+        if (req.Content is not null && req.Content.Length > 250_000)
+            return BadRequest(new { message = "Content payload is too large (max 250KB). Please use an image URL instead of direct file uploads." });
+
         var item = new Item
         {
             UserId = userId,
@@ -67,7 +70,12 @@ public class ItemsController(AppDbContext db) : ControllerBase
         if (item is null) return NotFound();
 
         if (req.Title is not null) item.Title = req.Title;
-        if (req.Content is not null) item.Content = req.Content;
+        if (req.Content is not null)
+        {
+            if (req.Content.Length > 250_000)
+                return BadRequest(new { message = "Content payload is too large (max 250KB). Please use an image URL instead of direct file uploads." });
+            item.Content = req.Content;
+        }
         if (req.Color is not null) item.Color = req.Color;
         if (req.Tags is not null) item.Tags = req.Tags;
         if (req.Priority is not null) item.Priority = req.Priority;
