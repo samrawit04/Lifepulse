@@ -58,6 +58,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -869,25 +870,23 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
 
     if (filesToProcess.length === 0) return;
 
-    const filePromises = filesToProcess.map((file) => {
+    const filePromises = filesToProcess.map(async (file): Promise<Omit<MediaBlock, "kind"> | null> => {
       if (file.size > MAX_FILE_BYTES) {
         toast.error(`"${file.name || "Pasted file"}" exceeds the 10 MB limit.`);
-        return Promise.resolve(null);
+        return null;
       }
-      return new Promise<Omit<MediaBlock, "kind"> | null>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const dataUrl = ev.target?.result as string;
-          let type: MediaBlock["type"] = "file";
-          if (file.type.startsWith("image/")) type = "image";
-          else if (file.type.startsWith("audio/")) type = "audio";
-          else if (file.type.startsWith("video/")) type = "video";
-          const name = file.name && file.name !== "image.png" ? file.name : `pasted-${type}-${Date.now()}.${file.type.split("/")[1] ?? "bin"}`;
-          resolve({ id: genId(), type, name, dataUrl, mimeType: file.type, layout: type === "image" ? "auto" : undefined });
-        };
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(file);
-      });
+      try {
+        let type: MediaBlock["type"] = "file";
+        if (file.type.startsWith("image/")) type = "image";
+        else if (file.type.startsWith("audio/")) type = "audio";
+        else if (file.type.startsWith("video/")) type = "video";
+        const name = file.name && file.name !== "image.png" ? file.name : `pasted-${type}-${Date.now()}.${file.type.split("/")[1] ?? "bin"}`;
+        const url = await uploadToCloudinary(file);
+        return { id: genId(), type, name, dataUrl: url, mimeType: file.type, layout: type === "image" ? "auto" : undefined };
+      } catch (err: any) {
+        toast.error(`Upload failed: ${err.message || err}`);
+        return null;
+      }
     });
 
     Promise.all(filePromises).then((results) => {
@@ -921,21 +920,19 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
-    const filePromises = files.map((file) => {
-      if (file.size > MAX_FILE_BYTES) { toast.error(`"${file.name}" exceeds 10 MB limit.`); return Promise.resolve(null); }
-      return new Promise<Omit<MediaBlock, "kind"> | null>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const dataUrl = ev.target?.result as string;
-          let type: MediaBlock["type"] = "file";
-          if (file.type.startsWith("image/")) type = "image";
-          else if (file.type.startsWith("audio/")) type = "audio";
-          else if (file.type.startsWith("video/")) type = "video";
-          resolve({ id: genId(), type, name: file.name, dataUrl, mimeType: file.type, layout: type === "image" ? "auto" : undefined });
-        };
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(file);
-      });
+    const filePromises = files.map(async (file): Promise<Omit<MediaBlock, "kind"> | null> => {
+      if (file.size > MAX_FILE_BYTES) { toast.error(`"${file.name}" exceeds 10 MB limit.`); return null; }
+      try {
+        let type: MediaBlock["type"] = "file";
+        if (file.type.startsWith("image/")) type = "image";
+        else if (file.type.startsWith("audio/")) type = "audio";
+        else if (file.type.startsWith("video/")) type = "video";
+        const url = await uploadToCloudinary(file);
+        return { id: genId(), type, name: file.name, dataUrl: url, mimeType: file.type, layout: type === "image" ? "auto" : undefined };
+      } catch (err: any) {
+        toast.error(`Upload failed: ${err.message || err}`);
+        return null;
+      }
     });
 
     Promise.all(filePromises).then((results) => {
@@ -1526,20 +1523,20 @@ function RecorderOverlay({ mode, onCapture, onClose }: {
     const mimeType = mode === "audio" ? "audio/webm" : "video/webm";
     const recorder = new MediaRecorder(streamRef.current, { mimeType });
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    recorder.onstop = () => {
+    recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: mimeType });
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target?.result as string;
+      try {
+        const url = await uploadToCloudinary(blob);
         onCapture({
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           type: mode === "audio" ? "audio" : "video",
           name: `recording-${Date.now()}.${mode === "audio" ? "webm" : "webm"}`,
-          dataUrl,
+          dataUrl: url,
           mimeType,
         });
-      };
-      reader.readAsDataURL(blob);
+      } catch (e: any) {
+        toast.error(`Failed to save recording: ${e.message || e}`);
+      }
     };
     recorder.start();
     recorderRef.current = recorder;
@@ -1568,14 +1565,21 @@ function RecorderOverlay({ mode, onCapture, onClose }: {
       ctx.scale(-1, 1);
     }
     ctx.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    onCapture({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      type: "image",
-      name: `photo-${Date.now()}.jpg`,
-      dataUrl,
-      mimeType: "image/jpeg",
-    });
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        const url = await uploadToCloudinary(blob);
+        onCapture({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: "image",
+          name: `photo-${Date.now()}.jpg`,
+          dataUrl: url,
+          mimeType: "image/jpeg",
+        });
+      } catch (e: any) {
+        toast.error(`Failed to save photo: ${e.message || e}`);
+      }
+    }, "image/jpeg", 0.85);
   };
 
   const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;

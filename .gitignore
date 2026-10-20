@@ -38,3 +38,6 @@ dist-ssr
 appsettings.Development.json
 UserSecretsId
 
+# Local backups
+backups/
+
