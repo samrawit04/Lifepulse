@@ -45,9 +45,19 @@ public class BackupController(AppDbContext db) : ControllerBase
         {
             databaseSizeBytes = dbSizeBytes,
             databaseSizeFormatted = $"{Math.Round(dbSizeBytes / (1024.0 * 1024.0), 2)} MB",
+            dbHost = db.Database.GetDbConnection().DataSource,
+            dbName = db.Database.GetDbConnection().Database,
             timestamp = DateTime.UtcNow,
             counts
         });
+    }
+
+    // POST /api/admin/backup/clear-all-data
+    [HttpPost("clear-all-data")]
+    public async Task<IActionResult> ClearAllData()
+    {
+        await db.Database.ExecuteSqlRawAsync(@"TRUNCATE TABLE ""Items"", ""Folders"", ""Expenses"", ""Playlists"", ""PlaylistItems"", ""Notifications"", ""PlannedPurchases"" CASCADE;");
+        return Ok(new { message = "All user data tables cleared successfully!" });
     }
 
     // GET /api/admin/backup/export
