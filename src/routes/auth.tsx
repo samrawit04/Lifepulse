@@ -71,29 +71,31 @@ function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-cozy-grain px-4 py-10">
-      <div className="mx-auto max-w-md">
-        <Link to="/" className="mb-8 flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-lagoon text-cream font-display text-lg">
-            L
+    <div className="min-h-screen flex items-center justify-center bg-cozy-grain px-4 py-10">
+      <div className="mx-auto w-full max-w-md">
+        <div className="rounded-3xl border bg-card p-7 sm:p-8 shadow-soft">
+          <div className="flex flex-col items-center text-center mb-6">
+            <Link to="/" className="group mb-4 inline-flex items-center justify-center focus:outline-none" title="Back to home">
+              <img
+                src="/logo.png"
+                alt="LifePulse Logo"
+                className="h-14 w-14 rounded-2xl object-cover border border-white/10 shadow-lg transition-transform duration-200 group-hover:scale-105"
+              />
+            </Link>
+            <h1 className="font-display text-2xl font-semibold text-lagoon">
+              {isSignup ? "Create your workspace" : "Welcome back"}
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {isSignup
+                ? "A quiet corner for your sticky notes, notebooks, and days."
+                : "Pick up right where you left off."}
+            </p>
           </div>
-          <span className="font-display text-xl font-semibold text-lagoon">LifePulse</span>
-        </Link>
-
-        <div className="rounded-3xl border bg-card p-7 shadow-soft">
-          <h1 className="font-display text-2xl font-semibold text-lagoon">
-            {isSignup ? "Create your workspace" : "Welcome back"}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isSignup
-              ? "A quiet corner for your sticky notes, notebooks, and days."
-              : "Pick up right where you left off."}
-          </p>
 
           <Button
             type="button"
             variant="outline"
-            className="mt-6 w-full"
+            className="w-full"
             onClick={onGoogle}
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
