@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { Pin, Trash2, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pin, Trash2, Plus, ZoomIn, ZoomOut, Maximize, MousePointerClick } from "lucide-react";
 import { useCreateItem, useDeleteItem, useItems, useUpdateItem } from "@/hooks/use-lifeos";
 import { NOTE_COLORS, noteColor, noteGradient, type Item } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
@@ -14,35 +14,70 @@ export const Route = createFileRoute("/_authenticated/sticky")({
 
 const DEFAULT_W = 240;
 const DEFAULT_H = 220;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.15;
+// Base canvas size — the virtual workspace
+const CANVAS_W = 6000;
+const CANVAS_H = 4000;
 
 function StickyBoard() {
   const { data: items = [] } = useItems();
   const create = useCreateItem();
   const update = useUpdateItem();
   const del = useDeleteItem();
+
   const boardRef = useRef<HTMLDivElement>(null);
   const lastTouchRef = useRef<number>(0);
 
+  const [zoom, setZoom] = useState(1);
+
   const notes = items.filter((i) => i.type === "sticky" && !i.archived);
 
-  const spawnNote = (x: number, y: number) => {
+  // Scaled canvas dimensions — this is what the scrollable area size becomes
+  const scaledW = CANVAS_W * zoom;
+  const scaledH = CANVAS_H * zoom;
+
+  // Compute the bounding box of all notes to auto-expand canvas if notes go beyond
+  const canvasSize = useMemo(() => {
+    let maxX = CANVAS_W;
+    let maxY = CANVAS_H;
+    for (const n of notes) {
+      const right = (n.pos_x ?? 0) + (n.width ?? DEFAULT_W) + 200;
+      const bottom = (n.pos_y ?? 0) + (n.height ?? DEFAULT_H) + 200;
+      if (right > maxX) maxX = right;
+      if (bottom > maxY) maxY = bottom;
+    }
+    return { w: maxX * zoom, h: maxY * zoom };
+  }, [notes, zoom]);
+
+  // Convert screen click to canvas coordinates (accounting for scroll + zoom)
+  const screenToCanvas = useCallback((clientX: number, clientY: number) => {
     const board = boardRef.current;
-    if (!board) return;
+    if (!board) return { x: 0, y: 0 };
     const rect = board.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left + board.scrollLeft) / zoom,
+      y: (clientY - rect.top + board.scrollTop) / zoom,
+    };
+  }, [zoom]);
+
+  const spawnNote = useCallback((clientX: number, clientY: number) => {
+    const canvasPos = screenToCanvas(clientX, clientY);
     const palette = NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)];
     create.mutate(
       {
         type: "sticky",
         content: "",
         color: palette.value,
-        pos_x: Math.max(10, x - rect.left - DEFAULT_W / 2 + board.scrollLeft),
-        pos_y: Math.max(10, y - rect.top - 30 + board.scrollTop),
+        pos_x: Math.max(10, canvasPos.x - DEFAULT_W / 2),
+        pos_y: Math.max(10, canvasPos.y - 30),
         width: DEFAULT_W,
         height: DEFAULT_H,
       },
       { onError: (err) => toast.error(err.message) },
     );
-  };
+  }, [screenToCanvas, create]);
 
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -71,11 +106,78 @@ function StickyBoard() {
     spawnNote(rect.left + rect.width / 2, rect.top + rect.height / 3);
   };
 
+  // --- Ctrl+Wheel to zoom, normal wheel scrolls naturally ---
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return; // Let normal scroll through for scrollbars
+      e.preventDefault();
+
+      // Get mouse position relative to the board viewport
+      const rect = board.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Position in canvas coords before zoom
+      const canvasX = (mouseX + board.scrollLeft) / zoom;
+      const canvasY = (mouseY + board.scrollTop) / zoom;
+
+      const delta = -e.deltaY * 0.002;
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom + delta * zoom));
+
+      setZoom(newZoom);
+
+      // After zoom, adjust scroll so the point under the cursor stays put
+      requestAnimationFrame(() => {
+        board.scrollLeft = canvasX * newZoom - mouseX;
+        board.scrollTop = canvasY * newZoom - mouseY;
+      });
+    };
+
+    board.addEventListener("wheel", onWheel, { passive: false });
+    return () => board.removeEventListener("wheel", onWheel);
+  }, [zoom]);
+
+  // --- Zoom controls ---
+  const zoomTo = useCallback((newZoom: number) => {
+    const board = boardRef.current;
+    if (!board) return;
+    // Zoom centered on the viewport center
+    const rect = board.getBoundingClientRect();
+    const centerX = (board.scrollLeft + rect.width / 2) / zoom;
+    const centerY = (board.scrollTop + rect.height / 2) / zoom;
+    setZoom(newZoom);
+    requestAnimationFrame(() => {
+      board.scrollLeft = centerX * newZoom - rect.width / 2;
+      board.scrollTop = centerY * newZoom - rect.height / 2;
+    });
+  }, [zoom]);
+
+  const zoomIn = () => zoomTo(Math.min(MAX_ZOOM, zoom + ZOOM_STEP));
+  const zoomOut = () => zoomTo(Math.max(MIN_ZOOM, zoom - ZOOM_STEP));
+  const zoomReset = () => {
+    setZoom(1);
+    const board = boardRef.current;
+    if (board) {
+      requestAnimationFrame(() => {
+        board.scrollLeft = 0;
+        board.scrollTop = 0;
+      });
+    }
+  };
+
+  const zoomPercent = Math.round(zoom * 100);
+
   return (
     <div className="relative flex h-[calc(100dvh-48px)] lg:h-dvh flex-col p-3 sm:p-4 lg:p-6 overflow-hidden">
       <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/60 px-4 sm:px-6 py-3 backdrop-blur rounded-2xl mb-3">
         <div>
           <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Sticky Board</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Double-click anywhere to create a sticky note
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground hidden sm:inline">{notes.length} notes</span>
@@ -89,28 +191,99 @@ function StickyBoard() {
         </div>
       </header>
 
+      {/* Scrollable board with native scrollbars */}
       <div
         ref={boardRef}
         onDoubleClick={onDoubleClick}
         onTouchEnd={onTouchEnd}
-        className="relative flex-1 min-h-0 overflow-auto bg-corkboard rounded-2xl"
+        className="relative flex-1 min-h-0 overflow-auto bg-corkboard rounded-2xl sticky-board-scroll"
       >
-        <div className="relative h-[1800px] w-[1800px]">
+        {/* Inner canvas — sized to create scrollable area */}
+        <div
+          className="relative origin-top-left"
+          style={{
+            width: Math.max(scaledW, canvasSize.w),
+            height: Math.max(scaledH, canvasSize.h),
+          }}
+        >
+          {/* Dot grid for spatial awareness — scaled with zoom */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: `radial-gradient(circle, oklch(1 0 0 / 0.06) 1px, transparent 1px)`,
+              backgroundSize: `${40 * zoom}px ${40 * zoom}px`,
+            }}
+          />
+
+          {/* Origin crosshair */}
+          <div
+            className="pointer-events-none absolute bg-white/10 rounded-full"
+            style={{ top: 20 * zoom - 1, left: 0, width: 40 * zoom, height: 2 }}
+          />
+          <div
+            className="pointer-events-none absolute bg-white/10 rounded-full"
+            style={{ top: 0, left: 20 * zoom - 1, width: 2, height: 40 * zoom }}
+          />
+
           {notes.map((n) => (
             <Note
               key={n.id}
               note={n}
               onChange={(patch) => update.mutate({ id: n.id, patch })}
               onDelete={() => del.mutate(n.id)}
+              zoom={zoom}
             />
           ))}
-          {notes.length === 0 && (
-            <div className="pointer-events-none absolute inset-0 grid place-items-center">
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-4 text-center text-sm text-muted-foreground backdrop-blur">
-                Double-tap anywhere to drop your first note
-              </div>
+        </div>
+
+        {/* Empty state overlay */}
+        {notes.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center">
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-8 py-6 text-center backdrop-blur">
+              <MousePointerClick className="h-8 w-8 mx-auto mb-3 text-muted-foreground/60" />
+              <p className="text-sm text-muted-foreground font-medium">Double-click anywhere to drop your first note</p>
+              <p className="text-xs text-muted-foreground/50 mt-1.5">
+                Scroll to navigate • Ctrl + Scroll to zoom
+              </p>
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Zoom controls — bottom-right floating panel (sticky inside scroll) */}
+        <div className="sticky bottom-4 float-right mr-4 flex items-center gap-1 rounded-xl border border-border/60 bg-background/80 backdrop-blur-lg shadow-lg px-1.5 py-1 z-10">
+          <button
+            onClick={zoomOut}
+            className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+            title="Zoom out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+
+          <button
+            onClick={zoomReset}
+            className="min-w-[3.2rem] rounded-lg px-2 py-1 text-xs font-mono font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-center"
+            title="Reset zoom & position"
+          >
+            {zoomPercent}%
+          </button>
+
+          <button
+            onClick={zoomIn}
+            className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+
+          <div className="w-px h-5 bg-border/60 mx-0.5" />
+
+          <button
+            onClick={zoomReset}
+            className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+            title="Fit to view"
+          >
+            <Maximize className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </div>
@@ -118,8 +291,8 @@ function StickyBoard() {
 }
 
 function Note({
-  note, onChange, onDelete,
-}: { note: Item; onChange: (patch: Partial<Item>) => void; onDelete: () => void }) {
+  note, onChange, onDelete, zoom,
+}: { note: Item; onChange: (patch: Partial<Item>) => void; onDelete: () => void; zoom: number }) {
   const [pos, setPos] = useState({ x: note.pos_x ?? 60, y: note.pos_y ?? 60 });
   const [size, setSize] = useState({ w: note.width ?? DEFAULT_W, h: note.height ?? DEFAULT_H });
   const [dragging, setDragging] = useState(false);
@@ -137,9 +310,16 @@ function Note({
     const onMove = (e: MouseEvent) => {
       const s = startRef.current;
       if (dragging) {
-        setPos({ x: s.px + (e.clientX - s.mx), y: s.py + (e.clientY - s.my) });
+        // Divide by zoom so mouse movement maps 1:1 to canvas-space movement
+        setPos({
+          x: s.px + (e.clientX - s.mx) / zoom,
+          y: s.py + (e.clientY - s.my) / zoom,
+        });
       } else {
-        setSize({ w: Math.max(180, s.w + (e.clientX - s.mx)), h: Math.max(160, s.h + (e.clientY - s.my)) });
+        setSize({
+          w: Math.max(180, s.w + (e.clientX - s.mx) / zoom),
+          h: Math.max(160, s.h + (e.clientY - s.my) / zoom),
+        });
       }
     };
     const onUp = () => {
@@ -154,7 +334,7 @@ function Note({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [dragging, resizing, pos, size, onChange]);
+  }, [dragging, resizing, pos, size, onChange, zoom]);
 
   const startDrag = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -169,6 +349,12 @@ function Note({
 
   const active = noteColor(note.color);
 
+  // Render note at zoomed position and size
+  const zoomedLeft = pos.x * zoom;
+  const zoomedTop = pos.y * zoom;
+  const zoomedW = size.w * zoom;
+  const zoomedH = size.h * zoom;
+
   return (
     <div
       data-sticky-note
@@ -179,8 +365,12 @@ function Note({
         dragging && "cursor-grabbing !shadow-2xl scale-[1.02] rotate-[-0.5deg]",
       )}
       style={{
-        left: pos.x, top: pos.y, width: size.w, height: size.h,
+        left: zoomedLeft,
+        top: zoomedTop,
+        width: zoomedW,
+        height: zoomedH,
         background: noteGradient(note.color),
+        fontSize: `${Math.max(10, 15 * zoom)}px`,
       }}
     >
       {/* soft top sheen */}
@@ -240,7 +430,11 @@ function Note({
           if (e.target.value !== note.content) onChange({ content: e.target.value });
         }}
         placeholder="Type your note…"
-        className="relative h-[calc(100%-32px)] w-full resize-none bg-transparent px-4 pb-4 pt-1 font-display text-[15px] leading-relaxed text-black/85 placeholder:font-sans placeholder:text-black/40 focus:outline-none"
+        className="relative w-full resize-none bg-transparent px-4 pb-4 pt-1 font-display leading-relaxed text-black/85 placeholder:font-sans placeholder:text-black/40 focus:outline-none"
+        style={{
+          height: "calc(100% - 32px)",
+          fontSize: "inherit",
+        }}
       />
 
       {/* accent corner */}
