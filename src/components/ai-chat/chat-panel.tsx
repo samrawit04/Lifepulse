@@ -17,7 +17,6 @@ interface ChatPanelProps {
 const SUGGESTIONS = [
   "What tasks are due this week?",
   "Am I spending too much?",
-  "Help me feel motivated today",
   "Summarize my open notes",
 ];
 
