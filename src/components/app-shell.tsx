@@ -9,7 +9,6 @@ import {
   Lightbulb,
   Loader2,
   Search,
-  SlidersHorizontal,
 } from "lucide-react";
 import { apiClient } from "@/integrations/api/client";
 import { cn } from "@/lib/utils";
@@ -96,15 +95,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="relative flex min-h-screen bg-cozy-grain">
-      <div
-        className={cn(
-          "fixed top-0 left-0 right-0 z-[9999] h-[3px] overflow-hidden transition-opacity duration-300 pointer-events-none",
-          isLoading ? "opacity-100" : "opacity-0",
-        )}
-      >
-        <div className="h-full w-full animate-loading-bar bg-gradient-to-r from-primary via-accent to-primary shadow-[0_0_12px_oklch(0.78_0.14_160/0.9)]" />
-      </div>
-
       {isLoading && (
         <div className="fixed top-4 right-4 z-[9999] flex items-center gap-2 rounded-full border border-white/10 bg-background/80 px-3 py-1.5 text-xs text-foreground shadow-soft backdrop-blur-xl animate-in fade-in duration-200 pointer-events-none">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -143,14 +133,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               />
             </button>
-            <button
-              onClick={() => setCustomizeOpen(true)}
-              aria-label="Customize sidebar"
-              className="grid h-8 w-8 sm:h-9 sm:w-9 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-muted-foreground backdrop-blur-xl transition-all hover:bg-white/10 hover:text-foreground"
-              title="Customize sidebar"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-            </button>
             <NotificationBell />
             <img
               src="/logo.png"
@@ -176,16 +158,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
           <span className="font-display text-base font-semibold text-foreground truncate">LifePulse</span>
 
-          {/* Mode Switcher + Notifications + Customize + Hide Sidebar on Sidebar Top Header */}
+          {/* Mode Switcher + Notifications + Hide Sidebar on Sidebar Top Header */}
           <div className="ml-auto flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setCustomizeOpen(true)}
-              aria-label="Customize sidebar navigation"
-              className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
-              title="Customize sidebar navigation"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-            </button>
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
@@ -256,7 +230,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
         </nav>
 
-        <SidebarUserProfile onSignOut={signOut} />
+        <SidebarUserProfile
+          onSignOut={signOut}
+          onCustomize={() => setCustomizeOpen(true)}
+        />
       </aside>
 
       {open && isMobile && (

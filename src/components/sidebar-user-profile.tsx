@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { LogOut, Pencil, Camera, Check, Sparkles, X, User as UserIcon } from "lucide-react";
+import { LogOut, Pencil, Camera, Check, Sparkles, X, User as UserIcon, SlidersHorizontal } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useCurrentUser } from "@/hooks/use-lifeos";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { toast } from "sonner";
@@ -57,9 +67,10 @@ function deriveInitials(name: string): string {
 
 interface SidebarUserProfileProps {
   onSignOut: () => void;
+  onCustomize?: () => void;
 }
 
-export function SidebarUserProfile({ onSignOut }: SidebarUserProfileProps) {
+export function SidebarUserProfile({ onSignOut, onCustomize }: SidebarUserProfileProps) {
   const { data: user } = useCurrentUser();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +87,7 @@ export function SidebarUserProfile({ onSignOut }: SidebarUserProfileProps) {
   });
 
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editAvatar, setEditAvatar] = useState("");
   const [editStatus, setEditStatus] = useState("");
@@ -134,7 +146,22 @@ export function SidebarUserProfile({ onSignOut }: SidebarUserProfileProps) {
 
   return (
     <>
-      <div className="relative border-t border-sidebar-border p-3">
+      <div className="relative border-t border-sidebar-border p-3 space-y-1.5">
+        {onCustomize && (
+          <button
+            type="button"
+            onClick={onCustomize}
+            className="group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-white/[0.04] hover:text-foreground"
+            title="Customize sidebar navigation"
+          >
+            <SlidersHorizontal
+              className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground"
+              strokeWidth={1.75}
+            />
+            <span className="flex-1 text-left">Customize</span>
+          </button>
+        )}
+
         <div className="group/user flex items-center gap-2.5 rounded-2xl p-2 transition-all duration-200 border border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]">
           {/* User Info clickable button to open profile customization */}
           <button
@@ -162,8 +189,11 @@ export function SidebarUserProfile({ onSignOut }: SidebarUserProfileProps) {
                 </p>
                 <Pencil className="h-2.5 w-2.5 text-muted-foreground/40 opacity-0 group-hover/user:opacity-100 transition-opacity shrink-0" />
               </div>
-              <p className="truncate text-[10px] text-muted-foreground/80 leading-tight mt-0.5" title={user?.email}>
-                {profile.statusMessage || user?.email || "Personal Workspace"}
+              <p
+                className="truncate text-[10px] text-muted-foreground/80 leading-tight mt-0.5"
+                title={profile.statusMessage || "Personal Workspace"}
+              >
+                {profile.statusMessage || "Personal Workspace"}
               </p>
             </div>
           </button>
@@ -172,7 +202,7 @@ export function SidebarUserProfile({ onSignOut }: SidebarUserProfileProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={onSignOut}
+            onClick={() => setConfirmSignOutOpen(true)}
             title="Sign out"
             className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 transition-colors"
           >
@@ -327,6 +357,37 @@ export function SidebarUserProfile({ onSignOut }: SidebarUserProfileProps) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Sign Out Confirmation Dialog */}
+      <AlertDialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
+        <AlertDialogContent className="border border-white/10 bg-card/95 text-card-foreground shadow-2xl backdrop-blur-2xl rounded-3xl max-w-sm p-6">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-base font-bold text-foreground flex items-center gap-2.5">
+              <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-destructive/15 text-destructive shrink-0">
+                <LogOut className="h-4 w-4" />
+              </span>
+              Sign out?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs font-medium text-muted-foreground leading-relaxed pt-1.5">
+              Are you sure you want to sign out? You will need to log back in to access your workspace.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel className="h-9 rounded-xl border border-white/10 bg-white/[0.04] text-foreground hover:bg-white/10 text-xs font-semibold">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmSignOutOpen(false);
+                onSignOut();
+              }}
+              className="h-9 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-semibold shadow-sm px-4"
+            >
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
