@@ -23,6 +23,7 @@ import { NotificationPoller } from "@/components/notification-poller";
 import { SidebarNotebookTree } from "@/components/sidebar-notebook-tree";
 import { useSidebarPreferences, ALL_SIDEBAR_ITEMS } from "@/hooks/use-sidebar-preferences";
 import { CustomizeSidebarDialog } from "@/components/customize-sidebar-dialog";
+import { SidebarUserProfile } from "@/components/sidebar-user-profile";
 
 const STORAGE_KEY = "lifepulse.sidebar.open";
 const THEME_STORAGE_KEY = "lifepulse.theme";
@@ -255,27 +256,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
         </nav>
 
-        <div className="relative border-t border-sidebar-border p-3 flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex-1 justify-start gap-2 text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.06] rounded-xl h-9"
-            onClick={() => setCustomizeOpen(true)}
-            title="Customize sidebar items"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
-            <span>Customize</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-center text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl h-9 px-3"
-            onClick={signOut}
-            title="Sign out"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
+        <SidebarUserProfile onSignOut={signOut} />
       </aside>
 
       {open && isMobile && (

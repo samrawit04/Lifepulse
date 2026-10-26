@@ -28,6 +28,14 @@ export function useFolders() {
   });
 }
 
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ["auth", "currentUser"],
+    queryFn: async () => apiClient.auth.getUser(),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
 export function useCreateItem() {
   const qc = useQueryClient();
   return useMutation({
