@@ -17,7 +17,6 @@ interface ChatPanelProps {
 const SUGGESTIONS = [
   "What tasks are due this week?",
   "Am I spending too much?",
-  "Help me feel motivated today",
   "Summarize my open notes",
 ];
 
@@ -115,7 +114,7 @@ export function ChatPanel({
             <div>
               <p className="font-display text-base font-bold text-slate-800">Hey, I'm your AI</p>
               <p className="mt-1 text-xs text-slate-500 leading-relaxed max-w-[240px]">
-                I know your tasks, notes, events &amp; spending. Ask me anything.
+               Hey Friend I am Your Assistant. I know your tasks, notes, events &amp; spending. Ask me anything.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2 w-full mt-1">
