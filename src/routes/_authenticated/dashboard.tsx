@@ -1,6 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { format, isToday, isTomorrow, isWithinInterval, addDays, startOfDay } from "date-fns";
-import { StickyNote, NotebookText, CheckSquare, CalendarDays, Pin, ArrowUpRight } from "lucide-react";
+import {
+  StickyNote,
+  NotebookText,
+  CheckSquare,
+  CalendarDays,
+  Pin,
+  ArrowUpRight,
+  Wallet,
+  Music,
+  Sparkles,
+  Archive,
+} from "lucide-react";
 import { useItems } from "@/hooks/use-lifeos";
 import { noteColorCss } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
@@ -8,8 +19,6 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
-
-
 
 function Dashboard() {
   const { data: items = [] } = useItems();
@@ -27,17 +36,53 @@ function Dashboard() {
 
   const pinnedNotes = active.filter((i) => i.type === "sticky" && i.pinned).slice(0, 4);
   const recentNotes = active.filter((i) => i.type === "sticky").slice(0, 6);
+  const notebookPages = active.filter((i) => i.type === "notebook_page").slice(0, 4);
 
   const stats = [
-    { label: "Sticky notes", value: active.filter((i) => i.type === "sticky").length, icon: StickyNote, tint: "from-note-yellow/30 to-transparent" },
-    { label: "Notebook pages", value: active.filter((i) => i.type === "notebook_page").length, icon: NotebookText, tint: "from-note-blue/30 to-transparent" },
-    { label: "Open tasks", value: active.filter((i) => i.type === "task" && !i.completed).length, icon: CheckSquare, tint: "from-note-green/30 to-transparent" },
-    { label: "Events this week", value: active.filter((i) => i.type === "event" && i.event_date && isWithinInterval(new Date(i.event_date), { start: today, end: in7 })).length, icon: CalendarDays, tint: "from-accent/30 to-transparent" },
+    {
+      label: "Sticky notes",
+      value: active.filter((i) => i.type === "sticky").length,
+      icon: StickyNote,
+      to: "/sticky" as const,
+      hint: "Open sticky board",
+    },
+    {
+      label: "Notebook pages",
+      value: active.filter((i) => i.type === "notebook_page").length,
+      icon: NotebookText,
+      to: "/notebooks" as const,
+      hint: "Open notebooks",
+    },
+    {
+      label: "Open tasks",
+      value: active.filter((i) => i.type === "task" && !i.completed).length,
+      icon: CheckSquare,
+      to: "/tasks" as const,
+      hint: "Open task board",
+    },
+    {
+      label: "Events this week",
+      value: active.filter((i) => i.type === "event" && i.event_date && isWithinInterval(new Date(i.event_date), { start: today, end: in7 })).length,
+      icon: CalendarDays,
+      to: "/calendar" as const,
+      hint: "Open calendar",
+    },
+  ];
+
+  const quickLinks = [
+    { label: "Sticky Notes", to: "/sticky" as const, icon: StickyNote },
+    { label: "Notebooks", to: "/notebooks" as const, icon: NotebookText },
+    { label: "Tasks", to: "/tasks" as const, icon: CheckSquare },
+    { label: "Calendar", to: "/calendar" as const, icon: CalendarDays },
+    { label: "Expenses", to: "/expenses" as const, icon: Wallet },
+    { label: "Music", to: "/music" as const, icon: Music },
+    { label: "Pinterest", to: "/pinterest" as const, icon: Sparkles },
+    { label: "Archive", to: "/archive" as const, icon: Archive },
   ];
 
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-6 py-3 sm:py-12">
-      <header className="mb-5 sm:mb-10 flex flex-wrap items-end justify-between gap-4 sm:gap-6">
+      <header className="mb-5 sm:mb-8 flex flex-wrap items-end justify-between gap-4 sm:gap-6">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
             {format(new Date(), "EEEE · MMMM d, yyyy")}
@@ -48,36 +93,67 @@ function Dashboard() {
         </div>
       </header>
 
-      <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon }) => (
-          <div key={label} className="glass-card relative overflow-hidden rounded-2xl p-5 border border-white/5 bg-white/[0.02]">
-            <div className="flex items-center justify-between">
-              <p className="text-xs uppercase tracking-[0.14em] font-medium text-muted-foreground">{label}</p>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold text-foreground">{value}</p>
-          </div>
+      {/* Quick Launch Shortcuts */}
+      <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap mr-1">Quick launch:</span>
+        {quickLinks.map(({ label, to, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur transition-all duration-200 hover:border-white/20 hover:bg-white/[0.08] hover:text-foreground whitespace-nowrap"
+          >
+            <Icon className="h-3.5 w-3.5 text-muted-foreground/80" />
+            <span>{label}</span>
+          </Link>
         ))}
       </div>
 
+      {/* 4 Main Stat Cards - Clickable links */}
+      <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map(({ label, value, icon: Icon, to, hint }) => (
+          <Link
+            key={label}
+            to={to}
+            title={hint}
+            className="glass-card group relative block overflow-hidden rounded-2xl p-5 border border-white/5 bg-white/[0.02] transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:bg-white/[0.05] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-[0.14em] font-medium text-muted-foreground group-hover:text-foreground transition-colors">{label}</p>
+              <div className="flex items-center gap-1">
+                <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/40 opacity-0 -translate-x-1 translate-y-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:text-primary" />
+              </div>
+            </div>
+            <p className="mt-2 font-display text-3xl font-semibold text-foreground group-hover:text-primary transition-colors">{value}</p>
+          </Link>
+        ))}
+      </div>
+
+      {/* Calendar & Tasks Panels */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Today's calendar" icon={CalendarDays} to="/calendar" accent="from-primary/20">
           {todayEvents.length === 0 ? (
-            <Empty text="Nothing scheduled. Enjoy the space." />
+            <Empty text="Nothing scheduled. Enjoy the space." to="/calendar" actionText="Open calendar" />
           ) : (
             <ul className="space-y-2">
               {todayEvents.map((e) => (
-                <li key={e.id} className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3 transition hover:bg-white/[0.06]">
-                  <div
-                    className="mt-1.5 h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor]"
-                    style={{ background: e.color ?? "var(--primary)", color: e.color ?? "var(--primary)" }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-foreground">{e.title || "Untitled event"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(e.event_date!), "p")}
-                    </p>
-                  </div>
+                <li key={e.id}>
+                  <Link
+                    to="/calendar"
+                    className="group flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06] hover:shadow-sm cursor-pointer"
+                  >
+                    <div
+                      className="mt-1.5 h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor] shrink-0"
+                      style={{ background: e.color ?? "var(--primary)", color: e.color ?? "var(--primary)" }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground group-hover:text-primary transition-colors">{e.title || "Untitled event"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(e.event_date!), "p")}
+                      </p>
+                    </div>
+                    <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 shrink-0 mt-1" />
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -86,18 +162,24 @@ function Dashboard() {
 
         <Panel title="Upcoming tasks" icon={CheckSquare} to="/tasks" accent="from-accent/20">
           {upcomingTasks.length === 0 ? (
-            <Empty text="Inbox zero this week." />
+            <Empty text="Inbox zero this week." to="/tasks" actionText="Go to tasks" />
           ) : (
             <ul className="space-y-2">
               {upcomingTasks.slice(0, 6).map((t) => (
-                <li key={t.id} className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3 transition hover:bg-white/[0.06]">
-                  <div className={cn("mt-1.5 h-2 w-2 rounded-full", prioClass(t.priority))} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-foreground">{t.title || "Untitled task"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Due {relDate(t.due_date!)}
-                    </p>
-                  </div>
+                <li key={t.id}>
+                  <Link
+                    to="/tasks"
+                    className="group flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06] hover:shadow-sm cursor-pointer"
+                  >
+                    <div className={cn("mt-1.5 h-2 w-2 rounded-full shrink-0", prioClass(t.priority))} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground group-hover:text-primary transition-colors">{t.title || "Untitled task"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Due {relDate(t.due_date!)}
+                      </p>
+                    </div>
+                    <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 shrink-0 mt-1" />
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -105,11 +187,67 @@ function Dashboard() {
         </Panel>
       </div>
 
+      {/* Notebook Pages Section (when notebook pages exist) */}
+      {notebookPages.length > 0 && (
+        <section className="mt-12">
+          <div className="mb-5 flex items-baseline justify-between">
+            <Link
+              to="/notebooks"
+              className="group/title inline-flex items-center gap-2 font-display text-xl font-semibold text-foreground hover:text-primary transition-colors"
+            >
+              <NotebookText className="h-5 w-5 text-muted-foreground group-hover/title:text-primary transition-colors" />
+              <span>Recent notebook pages</span>
+            </Link>
+            <Link
+              to="/notebooks"
+              className="group inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Open notebooks
+              <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </Link>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {notebookPages.map((p) => {
+              const snippet = extractSnippet(p.content);
+              return (
+                <Link
+                  key={p.id}
+                  to="/notebooks"
+                  search={{ pageId: p.id, folderId: p.folder_id ?? undefined }}
+                  className="glass-card group relative flex flex-col justify-between rounded-2xl p-5 border border-white/5 bg-white/[0.02] transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:bg-white/[0.05] hover:shadow-lg cursor-pointer"
+                >
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                      <span>{format(new Date(p.updated_at), "MMM d, yyyy")}</span>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <h3 className="font-display font-semibold text-base text-foreground group-hover:text-primary transition-colors truncate">
+                      {p.title || "Untitled page"}
+                    </h3>
+                    <p className="mt-2 line-clamp-3 text-xs text-muted-foreground leading-relaxed">
+                      {snippet || "Empty document…"}
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center text-[11px] font-medium text-primary/80 group-hover:text-primary">
+                    <span>Open in Notebooks →</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Sticky Notes Section */}
       <section className="mt-12">
         <div className="mb-5 flex items-baseline justify-between">
-          <h2 className="font-display text-xl font-semibold text-foreground">
-            {pinnedNotes.length > 0 ? "Pinned notes" : "Recent sticky notes"}
-          </h2>
+          <Link
+            to="/sticky"
+            className="group/title inline-flex items-center gap-2 font-display text-xl font-semibold text-foreground hover:text-primary transition-colors"
+          >
+            <StickyNote className="h-5 w-5 text-muted-foreground group-hover/title:text-primary transition-colors" />
+            <span>{pinnedNotes.length > 0 ? "Pinned notes" : "Recent sticky notes"}</span>
+          </Link>
           <Link
             to="/sticky"
             className="group inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
@@ -119,24 +257,30 @@ function Dashboard() {
           </Link>
         </div>
         {(pinnedNotes.length > 0 ? pinnedNotes : recentNotes).length === 0 ? (
-          <div className="glass-card rounded-2xl p-10 text-center text-muted-foreground">
-            No sticky notes yet. Head to the board and double-click anywhere to jot one down.
-          </div>
+          <Empty
+            text="No sticky notes yet. Head to the board and double-click anywhere to jot one down."
+            to="/sticky"
+            actionText="Open sticky board"
+          />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {(pinnedNotes.length > 0 ? pinnedNotes : recentNotes).map((n, i) => (
-              <div
+              <Link
                 key={n.id}
-                className="group relative aspect-square rounded-2xl p-4 shadow-note transition-transform duration-300 hover:-translate-y-1 hover:rotate-0"
+                to="/sticky"
+                className="group relative aspect-square rounded-2xl p-4 shadow-note transition-all duration-300 hover:-translate-y-1.5 hover:rotate-0 hover:shadow-xl cursor-pointer block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 style={{
                   background: `linear-gradient(160deg, ${noteColorCss(n.color)}, color-mix(in oklab, ${noteColorCss(n.color)} 70%, black))`,
                   transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (1 + (i % 3))}deg)`,
                 }}
               >
                 {n.pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-black/50" />}
-                {n.title && <p className="font-display text-lg text-black/85">{n.title}</p>}
+                {n.title && <p className="font-display text-lg text-black/85 group-hover:text-black transition-colors">{n.title}</p>}
                 <p className="mt-1 line-clamp-6 whitespace-pre-wrap text-sm text-black/75">{n.content}</p>
-              </div>
+                <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <ArrowUpRight className="h-4 w-4 text-black/60" />
+                </div>
+              </Link>
             ))}
           </div>
         )}
@@ -152,12 +296,14 @@ function greeting() {
   if (h < 18) return "afternoon";
   return "evening";
 }
+
 function relDate(iso: string) {
   const d = new Date(iso);
   if (isToday(d)) return "today";
   if (isTomorrow(d)) return "tomorrow";
   return format(d, "EEE, MMM d");
 }
+
 function prioClass(p: string | null) {
   return p === "high"
     ? "bg-destructive"
@@ -166,18 +312,51 @@ function prioClass(p: string | null) {
     : "bg-primary/60";
 }
 
+function extractSnippet(content: string | null): string {
+  if (!content) return "";
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((b: { kind?: string; content?: string }) => b.kind === "text" && typeof b.content === "string")
+        .map((b: { content: string }) => b.content)
+        .join(" ")
+        .trim();
+    }
+  } catch {
+    // raw text fallback
+  }
+  return content.trim();
+}
+
 function Panel({
-  title, icon: Icon, to, children,
-}: { title: string; icon: typeof StickyNote; to: string; children: React.ReactNode; accent?: string }) {
+  title,
+  icon: Icon,
+  to,
+  children,
+}: {
+  title: string;
+  icon: typeof StickyNote;
+  to: string;
+  children: React.ReactNode;
+  accent?: string;
+}) {
   return (
     <section className="glass-card group relative overflow-hidden rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
       <div className="relative mb-4 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 font-display text-base font-semibold text-foreground">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          {title}
-        </h2>
-        <Link to={to} className="text-xs text-muted-foreground transition hover:text-foreground">
-          View all →
+        <Link
+          to={to}
+          className="group/title flex items-center gap-2 font-display text-base font-semibold text-foreground hover:text-primary transition-colors"
+        >
+          <Icon className="h-4 w-4 text-muted-foreground group-hover/title:text-primary transition-colors" />
+          <span>{title}</span>
+        </Link>
+        <Link
+          to={to}
+          className="group/link inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+        >
+          <span>View all</span>
+          <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5" />
         </Link>
       </div>
       <div className="relative">{children}</div>
@@ -185,10 +364,16 @@ function Panel({
   );
 }
 
-function Empty({ text }: { text: string }) {
+function Empty({ text, to, actionText = "Open page" }: { text: string; to: string; actionText?: string }) {
   return (
-    <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm text-muted-foreground">
-      {text}
-    </p>
+    <Link
+      to={to}
+      className="group block rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm text-muted-foreground transition-all duration-200 hover:border-white/25 hover:bg-white/[0.05] hover:text-foreground cursor-pointer"
+    >
+      <p>{text}</p>
+      <span className="mt-2 inline-flex items-center gap-1 text-xs text-primary/80 opacity-75 group-hover:opacity-100 group-hover:underline">
+        {actionText} <ArrowUpRight className="h-3 w-3" />
+      </span>
+    </Link>
   );
 }
