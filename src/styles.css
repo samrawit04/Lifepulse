@@ -441,4 +441,13 @@ html.light .text-gradient-primary {
 [data-sonner-toast] [data-close-button]:hover {
   background: oklch(1 0 0 / 0.15) !important;
   color: oklch(0.96 0.01 160) !important;
-}
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+

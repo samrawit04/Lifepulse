@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { LogOut, Pencil, Camera, Check, Sparkles, X, User as UserIcon, SlidersHorizontal } from "lucide-react";
+import { LogOut, Pencil, Camera, Check, Sparkles, X, User as UserIcon, Settings } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,10 +67,11 @@ function deriveInitials(name: string): string {
 
 interface SidebarUserProfileProps {
   onSignOut: () => void;
+  onOpenSettings?: () => void;
   onCustomize?: () => void;
 }
 
-export function SidebarUserProfile({ onSignOut, onCustomize }: SidebarUserProfileProps) {
+export function SidebarUserProfile({ onSignOut, onOpenSettings, onCustomize }: SidebarUserProfileProps) {
   const { data: user } = useCurrentUser();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -148,18 +149,18 @@ export function SidebarUserProfile({ onSignOut, onCustomize }: SidebarUserProfil
   return (
     <>
       <div className="relative border-t border-sidebar-border p-3 space-y-1.5">
-        {onCustomize && (
+        {(onOpenSettings || onCustomize) && (
           <button
             type="button"
-            onClick={onCustomize}
+            onClick={onOpenSettings || onCustomize}
             className="group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-white/[0.04] hover:text-foreground"
-            title="Customize sidebar navigation"
+            title="Open workspace settings"
           >
-            <SlidersHorizontal
-              className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground"
+            <Settings
+              className="h-4 w-4 text-muted-foreground transition-all duration-300 group-hover:text-foreground group-hover:rotate-45"
               strokeWidth={1.75}
             />
-            <span className="flex-1 text-left">Customize</span>
+            <span className="flex-1 text-left">Settings</span>
           </button>
         )}
 

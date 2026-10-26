@@ -6,7 +6,6 @@ import {
   LogOut,
   Menu,
   PanelLeftClose,
-  Lightbulb,
   Loader2,
   Search,
 } from "lucide-react";
@@ -21,7 +20,7 @@ import { NotificationBell } from "@/components/notification-bell";
 import { NotificationPoller } from "@/components/notification-poller";
 import { SidebarNotebookTree } from "@/components/sidebar-notebook-tree";
 import { useSidebarPreferences, ALL_SIDEBAR_ITEMS } from "@/hooks/use-sidebar-preferences";
-import { CustomizeSidebarDialog } from "@/components/customize-sidebar-dialog";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { SidebarUserProfile } from "@/components/sidebar-user-profile";
 
 const STORAGE_KEY = "lifepulse.sidebar.open";
@@ -30,7 +29,7 @@ const THEME_STORAGE_KEY = "lifepulse.theme";
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<boolean>(true);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const { isVisible, items: navItems } = useSidebarPreferences();
@@ -54,6 +53,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
+    setThemeMode(next);
+  };
+
+  const setThemeMode = (next: "dark" | "light") => {
     setTheme(next);
     localStorage.setItem(THEME_STORAGE_KEY, next);
     if (next === "light") {
@@ -118,21 +121,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Visible ONLY on mobile screens (<1024px) */}
           <div className="pointer-events-auto flex items-center gap-1.5 lg:hidden">
-            <button
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              className="grid h-8 w-8 sm:h-9 sm:w-9 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-muted-foreground backdrop-blur-xl transition-all hover:bg-white/10 hover:text-foreground"
-              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              <Lightbulb
-                className={cn(
-                  "h-4 w-4 transition-all duration-300",
-                  theme === "dark"
-                    ? "text-white fill-white/20 drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]"
-                    : "text-slate-900 fill-slate-900/10 drop-shadow-sm",
-                )}
-              />
-            </button>
             <NotificationBell />
             <img
               src="/logo.png"
@@ -158,23 +146,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
           <span className="font-display text-base font-semibold text-foreground truncate">LifePulse</span>
 
-          {/* Mode Switcher + Notifications + Hide Sidebar on Sidebar Top Header */}
+          {/* Notifications + Hide Sidebar */}
           <div className="ml-auto flex items-center gap-1 shrink-0">
-            <button
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
-              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              <Lightbulb
-                className={cn(
-                  "h-4 w-4 transition-all duration-300",
-                  theme === "dark"
-                    ? "text-white fill-white/20 drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]"
-                    : "text-slate-900 fill-slate-900/10 drop-shadow-sm",
-                )}
-              />
-            </button>
             <NotificationBell />
             <button
               onClick={() => setOpen(false)}
@@ -232,7 +205,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <SidebarUserProfile
           onSignOut={signOut}
-          onCustomize={() => setCustomizeOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
       </aside>
 
@@ -260,7 +233,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
-      <CustomizeSidebarDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        theme={theme}
+        onSetTheme={setThemeMode}
+      />
       <AiChat />
       <MiniPlayer />
       <GlobalAudioPlayer />
