@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { format, isToday, isTomorrow, isWithinInterval, addDays, startOfDay } from "date-fns";
 import {
@@ -8,16 +7,10 @@ import {
   CalendarDays,
   Pin,
   ArrowUpRight,
-  Wallet,
-  Music,
-  Sparkles,
-  Archive,
-  SlidersHorizontal,
 } from "lucide-react";
 import { useItems } from "@/hooks/use-lifeos";
 import { noteColorCss } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
-import { CustomizeSidebarDialog } from "@/components/customize-sidebar-dialog";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -25,7 +18,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { data: items = [] } = useItems();
-  const [customizeOpen, setCustomizeOpen] = useState(false);
   const active = items.filter((i) => !i.archived);
   const today = startOfDay(new Date());
   const in7 = addDays(today, 7);
@@ -73,52 +65,19 @@ function Dashboard() {
     },
   ];
 
-  const quickLinks = [
-    { label: "Sticky Notes", to: "/sticky" as const, icon: StickyNote },
-    { label: "Notebooks", to: "/notebooks" as const, icon: NotebookText },
-    { label: "Tasks", to: "/tasks" as const, icon: CheckSquare },
-    { label: "Calendar", to: "/calendar" as const, icon: CalendarDays },
-    { label: "Expenses", to: "/expenses" as const, icon: Wallet },
-    { label: "Music", to: "/music" as const, icon: Music },
-    { label: "Pinterest", to: "/pinterest" as const, icon: Sparkles },
-    { label: "Archive", to: "/archive" as const, icon: Archive },
-  ];
-
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-6 py-3 sm:py-12">
-      <header className="mb-5 sm:mb-8 flex flex-wrap items-end justify-between gap-4 sm:gap-6">
+      <header className="mb-6 sm:mb-10 flex flex-wrap items-end justify-between gap-4 sm:gap-6">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-            {format(new Date(), "EEEE · MMMM d, yyyy")}
-          </div>
-          <h1 className="mt-2 sm:mt-4 font-display text-xl sm:text-3xl lg:text-4xl font-semibold leading-tight text-foreground">
+          <p className="text-xs sm:text-sm font-medium tracking-wide text-muted-foreground">
+            {format(new Date(), "EEEE, MMMM d, yyyy")}
+          </p>
+
+          <h1 className="mt-2 sm:mt-3 font-display text-xl sm:text-3xl lg:text-4xl font-semibold leading-tight text-foreground">
             Good {greeting()}.
           </h1>
         </div>
       </header>
-
-      {/* Quick Launch Shortcuts */}
-      <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap mr-1">Quick launch:</span>
-        {quickLinks.map(({ label, to, icon: Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur transition-all duration-200 hover:border-white/20 hover:bg-white/[0.08] hover:text-foreground whitespace-nowrap"
-          >
-            <Icon className="h-3.5 w-3.5 text-muted-foreground/80" />
-            <span>{label}</span>
-          </Link>
-        ))}
-        <button
-          onClick={() => setCustomizeOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-white/20 bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-primary whitespace-nowrap cursor-pointer ml-auto"
-          title="Customize sidebar navigation"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
-          <span>Customize sidebar</span>
-        </button>
-      </div>
 
       {/* 4 Main Stat Cards - Clickable links */}
       <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -297,8 +256,6 @@ function Dashboard() {
           </div>
         )}
       </section>
-
-      <CustomizeSidebarDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
     </div>
   );
 }
@@ -328,19 +285,73 @@ function prioClass(p: string | null) {
 
 function extractSnippet(content: string | null): string {
   if (!content) return "";
+  const trimmed = content.trim();
+  if (!trimmed) return "";
+
+  const cleanText = (str: string) =>
+    str
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
   try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .filter((b: { kind?: string; content?: string }) => b.kind === "text" && typeof b.content === "string")
-        .map((b: { content: string }) => b.content)
-        .join(" ")
-        .trim();
+    const parsed = JSON.parse(trimmed);
+
+    // Format 1: { version: 2, blocks: [...] } or { blocks: [...] }
+    if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).blocks)) {
+      const textParts: string[] = [];
+      for (const b of (parsed as any).blocks) {
+        if (b && b.kind === "text" && typeof b.content === "string") {
+          const cleaned = cleanText(b.content);
+          if (cleaned) textParts.push(cleaned);
+        } else if (b && b.kind === "table" && Array.isArray(b.rows)) {
+          for (const row of b.rows) {
+            if (Array.isArray(row)) {
+              for (const cell of row) {
+                if (typeof cell === "string" && cell.trim()) {
+                  const cleaned = cleanText(cell);
+                  if (cleaned) textParts.push(cleaned);
+                }
+              }
+            }
+          }
+        }
+      }
+      return textParts.join(" ").trim();
     }
+
+    // Format 2: Direct array of blocks [ { kind: "text", content: ... } ]
+    if (Array.isArray(parsed)) {
+      const textParts: string[] = [];
+      for (const b of parsed) {
+        if (b && typeof b === "object") {
+          if (typeof b.content === "string") {
+            const cleaned = cleanText(b.content);
+            if (cleaned) textParts.push(cleaned);
+          } else if (typeof b.text === "string") {
+            const cleaned = cleanText(b.text);
+            if (cleaned) textParts.push(cleaned);
+          }
+        }
+      }
+      return textParts.join(" ").trim();
+    }
+
+    // Format 3: Legacy { text: "...", attachments: [...] }
+    if (parsed && typeof parsed === "object" && typeof (parsed as any).text === "string") {
+      return cleanText((parsed as any).text);
+    }
+
+    // Unrecognized JSON structure — do NOT show raw JSON
+    return "";
   } catch {
-    // raw text fallback
+    // If it looks like JSON that failed parsing, don't show raw JSON
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      return "";
+    }
+    return cleanText(trimmed);
   }
-  return content.trim();
 }
 
 function Panel({
