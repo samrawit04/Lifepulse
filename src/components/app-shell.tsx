@@ -3,20 +3,13 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import {
-  LayoutDashboard,
-  StickyNote,
-  NotebookText,
-  CalendarDays,
-  CheckSquare,
-  Archive,
-  Search,
   LogOut,
   Menu,
-  Wallet,
   PanelLeftClose,
   Lightbulb,
-  Music,
   Loader2,
+  Search,
+  SlidersHorizontal,
 } from "lucide-react";
 import { apiClient } from "@/integrations/api/client";
 import { cn } from "@/lib/utils";
@@ -28,26 +21,8 @@ import { GlobalAudioPlayer } from "@/components/global-audio-player";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationPoller } from "@/components/notification-poller";
 import { SidebarNotebookTree } from "@/components/sidebar-notebook-tree";
-
-function PinterestIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738.098.119.112.224.083.345-.09.375-.293 1.199-.334 1.367-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.541.535 6.627 0 12-5.373 12-12 0-6.628-5.373-12-12-12z" />
-    </svg>
-  );
-}
-
-const NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/sticky", label: "Sticky Notes", icon: StickyNote },
-  { to: "/notebooks", label: "Notebooks", icon: NotebookText },
-  { to: "/calendar", label: "Calendar", icon: CalendarDays },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
-  { to: "/expenses", label: "Expenses", icon: Wallet },
-  { to: "/music", label: "Music", icon: Music },
-  { to: "/pinterest", label: "Pinterest", icon: PinterestIcon },
-  { to: "/archive", label: "Archive", icon: Archive },
-] as const;
+import { useSidebarPreferences, ALL_SIDEBAR_ITEMS } from "@/hooks/use-sidebar-preferences";
+import { CustomizeSidebarDialog } from "@/components/customize-sidebar-dialog";
 
 const STORAGE_KEY = "lifepulse.sidebar.open";
 const THEME_STORAGE_KEY = "lifepulse.theme";
@@ -55,13 +30,15 @@ const THEME_STORAGE_KEY = "lifepulse.theme";
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<boolean>(true);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const { isVisible, items: navItems } = useSidebarPreferences();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const pageTitle = (() => {
-    const found = NAV.find((n) => pathname === n.to || pathname.startsWith(n.to + "/"));
+    const found = ALL_SIDEBAR_ITEMS.find((n) => pathname === n.to || pathname.startsWith(n.to + "/"));
     return found?.label ?? "LifePulse";
   })();
 
@@ -165,6 +142,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               />
             </button>
+            <button
+              onClick={() => setCustomizeOpen(true)}
+              aria-label="Customize sidebar"
+              className="grid h-8 w-8 sm:h-9 sm:w-9 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-muted-foreground backdrop-blur-xl transition-all hover:bg-white/10 hover:text-foreground"
+              title="Customize sidebar"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </button>
             <NotificationBell />
             <img
               src="/logo.png"
@@ -190,8 +175,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
           <span className="font-display text-base font-semibold text-foreground truncate">LifePulse</span>
 
-          {/* Mode Switcher + Notifications + Hide Sidebar on Sidebar Top Header */}
+          {/* Mode Switcher + Notifications + Customize + Hide Sidebar on Sidebar Top Header */}
           <div className="ml-auto flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setCustomizeOpen(true)}
+              aria-label="Customize sidebar navigation"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
+              title="Customize sidebar navigation"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </button>
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
@@ -231,42 +224,56 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="relative mt-4 flex-1 space-y-1 overflow-y-auto px-3">
-          {NAV.map(({ to, label, icon: Icon }) => {
-            if (to === "/notebooks") {
-              return <SidebarNotebookTree key={to} currentPath={pathname} />;
-            }
-            const active = pathname === to || pathname.startsWith(to + "/");
-            return (
-              <Link
-                key={to}
-                to={to}
-                className={cn(
-                  "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary/10 text-foreground font-semibold"
-                    : "text-sidebar-foreground/80 hover:bg-white/[0.04] hover:text-foreground",
-                )}
-              >
-                <Icon
+          {navItems
+            .filter((item) => isVisible(item.to))
+            .map(({ to, label, icon: Icon }) => {
+              if (to === "/notebooks") {
+                return <SidebarNotebookTree key={to} currentPath={pathname} />;
+              }
+              const active = pathname === to || pathname.startsWith(to + "/");
+              return (
+                <Link
+                  key={to}
+                  to={to}
                   className={cn(
-                    "h-4 w-4 transition-colors",
-                    active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-primary/10 text-foreground font-semibold"
+                      : "text-sidebar-foreground/80 hover:bg-white/[0.04] hover:text-foreground",
                   )}
-                  strokeWidth={active ? 2 : 1.75}
-                />
-                {label}
-              </Link>
-            );
-          })}
+                >
+                  <Icon
+                    className={cn(
+                      "h-4 w-4 transition-colors",
+                      active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    )}
+                    strokeWidth={active ? 2 : 1.75}
+                  />
+                  {label}
+                </Link>
+              );
+            })}
         </nav>
 
-        <div className="relative border-t border-sidebar-border p-3 flex items-center justify-between gap-2">
+        <div className="relative border-t border-sidebar-border p-3 flex items-center gap-1.5">
           <Button
             variant="ghost"
-            className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground"
-            onClick={signOut}
+            size="sm"
+            className="flex-1 justify-start gap-2 text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.06] rounded-xl h-9"
+            onClick={() => setCustomizeOpen(true)}
+            title="Customize sidebar items"
           >
-            <LogOut className="h-4 w-4" /> Sign out
+            <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+            <span>Customize</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-center text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl h-9 px-3"
+            onClick={signOut}
+            title="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </aside>
@@ -295,6 +302,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+      <CustomizeSidebarDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
       <AiChat />
       <MiniPlayer />
       <GlobalAudioPlayer />

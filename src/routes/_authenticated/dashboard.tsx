@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { format, isToday, isTomorrow, isWithinInterval, addDays, startOfDay } from "date-fns";
 import {
@@ -11,10 +12,12 @@ import {
   Music,
   Sparkles,
   Archive,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useItems } from "@/hooks/use-lifeos";
 import { noteColorCss } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
+import { CustomizeSidebarDialog } from "@/components/customize-sidebar-dialog";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -22,6 +25,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { data: items = [] } = useItems();
+  const [customizeOpen, setCustomizeOpen] = useState(false);
   const active = items.filter((i) => !i.archived);
   const today = startOfDay(new Date());
   const in7 = addDays(today, 7);
@@ -106,6 +110,14 @@ function Dashboard() {
             <span>{label}</span>
           </Link>
         ))}
+        <button
+          onClick={() => setCustomizeOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-white/20 bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-primary whitespace-nowrap cursor-pointer ml-auto"
+          title="Customize sidebar navigation"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+          <span>Customize sidebar</span>
+        </button>
       </div>
 
       {/* 4 Main Stat Cards - Clickable links */}
@@ -285,6 +297,8 @@ function Dashboard() {
           </div>
         )}
       </section>
+
+      <CustomizeSidebarDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
     </div>
   );
 }
