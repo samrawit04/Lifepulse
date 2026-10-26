@@ -115,6 +115,7 @@ export function SidebarUserProfile({ onSignOut, onCustomize }: SidebarUserProfil
     setProfile(updated);
     try {
       localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent("lifepulse:profile-updated", { detail: updated }));
       toast.success("Profile updated");
     } catch (err) {
       console.error(err);
