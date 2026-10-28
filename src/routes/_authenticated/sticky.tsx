@@ -191,54 +191,57 @@ function StickyBoard() {
         </div>
       </header>
 
-      {/* Scrollable board with native scrollbars */}
-      <div
-        ref={boardRef}
-        onDoubleClick={onDoubleClick}
-        onTouchEnd={onTouchEnd}
-        className="relative flex-1 min-h-0 overflow-auto bg-corkboard rounded-2xl sticky-board-scroll"
-      >
-        {/* Inner canvas — sized to create scrollable area */}
+      {/* Board container with fixed overlays */}
+      <div className="relative flex-1 min-h-0 rounded-2xl overflow-hidden border border-border/40">
+        {/* Scrollable board with native scrollbars */}
         <div
-          className="relative origin-top-left"
-          style={{
-            width: Math.max(scaledW, canvasSize.w),
-            height: Math.max(scaledH, canvasSize.h),
-          }}
+          ref={boardRef}
+          onDoubleClick={onDoubleClick}
+          onTouchEnd={onTouchEnd}
+          className="h-full w-full overflow-auto bg-corkboard sticky-board-scroll"
         >
-          {/* Dot grid for spatial awareness — scaled with zoom */}
+          {/* Inner canvas — sized to create scrollable area */}
           <div
-            className="pointer-events-none absolute inset-0"
+            className="relative origin-top-left"
             style={{
-              backgroundImage: `radial-gradient(circle, oklch(1 0 0 / 0.06) 1px, transparent 1px)`,
-              backgroundSize: `${40 * zoom}px ${40 * zoom}px`,
+              width: Math.max(scaledW, canvasSize.w),
+              height: Math.max(scaledH, canvasSize.h),
             }}
-          />
-
-          {/* Origin crosshair */}
-          <div
-            className="pointer-events-none absolute bg-white/10 rounded-full"
-            style={{ top: 20 * zoom - 1, left: 0, width: 40 * zoom, height: 2 }}
-          />
-          <div
-            className="pointer-events-none absolute bg-white/10 rounded-full"
-            style={{ top: 0, left: 20 * zoom - 1, width: 2, height: 40 * zoom }}
-          />
-
-          {notes.map((n) => (
-            <Note
-              key={n.id}
-              note={n}
-              onChange={(patch) => update.mutate({ id: n.id, patch })}
-              onDelete={() => del.mutate(n.id)}
-              zoom={zoom}
+          >
+            {/* Dot grid for spatial awareness — scaled with zoom */}
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage: `radial-gradient(circle, oklch(1 0 0 / 0.06) 1px, transparent 1px)`,
+                backgroundSize: `${40 * zoom}px ${40 * zoom}px`,
+              }}
             />
-          ))}
+
+            {/* Origin crosshair */}
+            <div
+              className="pointer-events-none absolute bg-white/10 rounded-full"
+              style={{ top: 20 * zoom - 1, left: 0, width: 40 * zoom, height: 2 }}
+            />
+            <div
+              className="pointer-events-none absolute bg-white/10 rounded-full"
+              style={{ top: 0, left: 20 * zoom - 1, width: 2, height: 40 * zoom }}
+            />
+
+            {notes.map((n) => (
+              <Note
+                key={n.id}
+                note={n}
+                onChange={(patch) => update.mutate({ id: n.id, patch })}
+                onDelete={() => del.mutate(n.id)}
+                zoom={zoom}
+              />
+            ))}
+          </div>
         </div>
 
-        {/* Empty state overlay */}
+        {/* Empty state overlay — centered in visible viewport */}
         {notes.length === 0 && (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <div className="pointer-events-none absolute inset-0 grid place-items-center z-10">
             <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-8 py-6 text-center backdrop-blur">
               <MousePointerClick className="h-8 w-8 mx-auto mb-3 text-muted-foreground/60" />
               <p className="text-sm text-muted-foreground font-medium">Double-click anywhere to drop your first note</p>
@@ -249,8 +252,11 @@ function StickyBoard() {
           </div>
         )}
 
-        {/* Zoom controls — bottom-right floating panel (sticky inside scroll) */}
-        <div className="sticky bottom-4 float-right mr-4 flex items-center gap-1 rounded-xl border border-border/60 bg-background/80 backdrop-blur-lg shadow-lg px-1.5 py-1 z-10">
+        {/* Zoom controls — fixed position over canvas (bottom-left corner) */}
+        <div
+          onDoubleClick={(e) => e.stopPropagation()}
+          className="pointer-events-auto absolute bottom-4 left-4 sm:bottom-5 sm:left-5 flex items-center gap-1 rounded-xl border border-border/60 bg-background/85 backdrop-blur-lg shadow-lg px-1.5 py-1 z-20"
+        >
           <button
             onClick={zoomOut}
             className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
