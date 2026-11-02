@@ -3,6 +3,7 @@ import { apiClient } from "@/integrations/api/client";
 import type { Expense, ExpenseInsert, ExpenseUpdate } from "@/lib/lifeos-types";
 
 const KEY = ["expenses"] as const;
+const BUDGETS_KEY = ["category-budgets"] as const;
 
 export function useExpenses() {
   return useQuery({
@@ -40,5 +41,27 @@ export function useDeleteExpense() {
       await apiClient.delete(`/api/expenses/${id}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useCategoryBudgets() {
+  return useQuery({
+    queryKey: BUDGETS_KEY,
+    queryFn: async (): Promise<Record<string, number>> => {
+      return apiClient.get<Record<string, number>>("/api/category-budgets");
+    },
+  });
+}
+
+export function useUpsertCategoryBudgets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (budgets: Record<string, number>) => {
+      return apiClient.put<Record<string, number>>("/api/category-budgets", { budgets });
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(BUDGETS_KEY, data);
+      qc.invalidateQueries({ queryKey: BUDGETS_KEY });
+    },
   });
 }

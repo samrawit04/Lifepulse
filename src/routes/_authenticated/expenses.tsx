@@ -11,6 +11,8 @@ import {
   useCreateExpense,
   useDeleteExpense,
   useExpenses,
+  useCategoryBudgets,
+  useUpsertCategoryBudgets,
 } from "@/hooks/use-expenses";
 import {
   usePlannedPurchases,
@@ -18,7 +20,7 @@ import {
   useUpdatePlannedPurchase,
   useDeletePlannedPurchase,
 } from "@/hooks/use-planned-purchases";
-import { EXPENSE_CATEGORIES, categoryEmoji } from "@/lib/lifeos-types";
+import { EXPENSE_CATEGORIES } from "@/lib/lifeos-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -59,6 +61,8 @@ function ExpensesPage() {
   const createPurchase = useCreatePlannedPurchase();
   const updatePurchase = useUpdatePlannedPurchase();
   const deletePurchase = useDeletePlannedPurchase();
+  const { data: backendBudgets = {} } = useCategoryBudgets();
+  const upsertBudgets = useUpsertCategoryBudgets();
 
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<string>("Food");
@@ -92,14 +96,12 @@ function ExpensesPage() {
   // Time Period Filter State for Analytics Tab
   const [activePeriod, setActivePeriod] = useState<PeriodType>("month");
 
-  // Category Budgets State (Defaulting to user's parameters)
-  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("lifepulse.expenses.category_budgets");
-      return saved ? JSON.parse(saved) : { Food: 4000, Transport: 3000, Shopping: 1000 };
-    }
-    return { Food: 4000, Transport: 3000, Shopping: 1000 };
-  });
+  // Category Budgets State (Synced with Backend)
+  const categoryBudgets: Record<string, number> = useMemo(() => {
+    return Object.keys(backendBudgets).length > 0
+      ? backendBudgets
+      : { Food: 4000, Transport: 3000, Shopping: 1000 };
+  }, [backendBudgets]);
 
   const [isCategoryBudgetOpen, setIsCategoryBudgetOpen] = useState(false);
   const [isViewPlanOpen, setIsViewPlanOpen] = useState(false);
@@ -322,10 +324,15 @@ function ExpensesPage() {
         next[c.value] = val;
       }
     });
-    setCategoryBudgets(next);
-    localStorage.setItem("lifepulse.expenses.category_budgets", JSON.stringify(next));
-    setIsCategoryBudgetOpen(false);
-    toast.success("Category budgets updated!");
+    upsertBudgets.mutate(next, {
+      onSuccess: () => {
+        setIsCategoryBudgetOpen(false);
+        toast.success("Category budgets saved to database!");
+      },
+      onError: (err) => {
+        toast.error(err.message || "Failed to save category budgets");
+      },
+    });
   };
 
   // Add item to planned wishlist
@@ -515,7 +522,7 @@ function ExpensesPage() {
                         : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    <span>{c.emoji}</span> {c.value}
+                    {c.value}
                   </button>
                 ))}
               </div>
@@ -556,9 +563,6 @@ function ExpensesPage() {
                 {todayExpenses.map((e) => (
                   <li key={e.id} className="group flex items-center justify-between gap-3 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.04] text-sm">
-                        {categoryEmoji(e.category)}
-                      </div>
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-sm text-foreground">
                           {e.note || e.category}
@@ -609,9 +613,6 @@ function ExpensesPage() {
                     return (
                       <li key={e.id} className="group flex items-center justify-between gap-3 py-2 text-xs">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/[0.04] text-xs">
-                            {categoryEmoji(e.category)}
-                          </div>
                           <div className="min-w-0">
                             <p className="truncate font-medium text-xs text-foreground">
                               {e.note || e.category}
@@ -833,7 +834,6 @@ function ExpensesPage() {
               <p className="font-display text-2xl sm:text-3xl font-bold text-foreground mt-1 truncate">
                 {byCategory.length > 0 ? (
                   <>
-                    <span className="mr-1.5">{categoryEmoji(byCategory[0][0])}</span>
                     {byCategory[0][0]}
                   </>
                 ) : (
@@ -858,10 +858,7 @@ function ExpensesPage() {
                   return (
                     <li key={cat} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs sm:text-sm">
-                        <span className="flex items-center gap-2 font-medium text-foreground">
-                          <span>{categoryEmoji(cat)}</span>
-                          <span>{cat}</span>
-                        </span>
+                        <span className="font-medium text-foreground">{cat}</span>
                         <span className="text-muted-foreground text-xs font-mono">
                           {val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {CURRENCY} ({pct.toFixed(0)}%)
                         </span>
@@ -891,9 +888,6 @@ function ExpensesPage() {
               <ul className="divide-y divide-white/5 max-h-96 overflow-y-auto pr-1">
                 {filteredExpenses.map((e) => (
                   <li key={e.id} className="group flex items-center gap-3 py-3">
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.04] text-base">
-                      {categoryEmoji(e.category)}
-                    </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-xs sm:text-sm text-foreground">
                         {e.note || e.category}
@@ -958,7 +952,7 @@ function ExpensesPage() {
                   >
                     {EXPENSE_CATEGORIES.map((c) => (
                       <option key={c.value} value={c.value}>
-                        {c.emoji} {c.value}
+                        {c.value}
                       </option>
                     ))}
                   </select>
@@ -981,7 +975,7 @@ function ExpensesPage() {
                         {p.name}
                       </p>
                       <p className="text-[10px] text-muted-foreground">
-                        {categoryEmoji(p.category)} {p.category} · {p.amount} {CURRENCY}
+                        {p.category} · {p.amount} {CURRENCY}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1045,9 +1039,7 @@ function ExpensesPage() {
               return (
                 <div key={c.value} className="bg-muted/40 border border-border/60 rounded-xl p-3 flex flex-col justify-between transition-colors">
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="flex items-center gap-1.5 font-semibold text-foreground">
-                      <span>{c.emoji}</span> {c.value}
-                    </span>
+                    <span className="font-semibold text-foreground">{c.value}</span>
                     <span className="text-muted-foreground text-[11px] font-medium">
                       {limit > 0 ? `${limit} ${CURRENCY}` : "Uncapped"}
                     </span>
@@ -1099,9 +1091,7 @@ function ExpensesPage() {
             <div className="py-3 max-h-[300px] overflow-y-auto space-y-2 px-1 scrollbar-none">
               {EXPENSE_CATEGORIES.map((c) => (
                 <div key={c.value} className="flex items-center justify-between gap-4 py-1.5 px-2 rounded-lg hover:bg-muted/30 transition-colors">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <span>{c.emoji}</span> {c.value}
-                  </span>
+                  <span className="text-sm font-semibold text-foreground">{c.value}</span>
                   <div className="flex items-center gap-1.5 justify-end">
                     <Input
                       type="number"

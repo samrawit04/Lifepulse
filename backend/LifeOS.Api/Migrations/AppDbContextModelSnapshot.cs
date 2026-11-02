@@ -22,6 +22,37 @@ namespace LifeOS.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("LifeOS.Api.Models.CategoryBudget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Category")
+                        .IsUnique();
+
+                    b.ToTable("CategoryBudgets");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Expense", b =>
                 {
                     b.Property<Guid>("Id")
@@ -365,6 +396,17 @@ namespace LifeOS.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.CategoryBudget", b =>
+                {
+                    b.HasOne("LifeOS.Api.Models.User", "User")
+                        .WithMany("CategoryBudgets")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Expense", b =>
                 {
                     b.HasOne("LifeOS.Api.Models.User", "User")
@@ -468,6 +510,8 @@ namespace LifeOS.Api.Migrations
 
             modelBuilder.Entity("LifeOS.Api.Models.User", b =>
                 {
+                    b.Navigation("CategoryBudgets");
+
                     b.Navigation("Expenses");
 
                     b.Navigation("Folders");
