@@ -215,18 +215,33 @@ export function useNotificationPoller({
       add({ category: "calendar", icon: "📅", title: "Event coming up", body: `${ev.title || "Untitled"} starts in ${mins} min`, link: "/calendar" });
     }
 
-    // ── 2. Overdue tasks ───────────────────────────────────────────────────
-    const overdueTasks = items.filter((i) => i.type === "task" && !i.completed && !i.archived && i.due_date && new Date(i.due_date) < now);
+    // Start of today (midnight) — tasks due before today are overdue
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // ── 2. Overdue tasks (due strictly BEFORE today) ────────────────────────
+    const overdueTasks = items.filter((i) => {
+      if (i.type !== "task" || i.completed || i.archived || !i.due_date) return false;
+      const due = new Date(i.due_date);
+      return due < startOfToday;
+    });
+
     if (overdueTasks.length > 0) {
-      const key = `tasks-overdue-${overdueTasks.length}-${now.toDateString()}`;
-      if (!firedRef.current.has(key)) {
+      const todayStr = now.toDateString();
+      const localKey = "lifepulse_last_overdue_notif_date";
+      const lastFired = typeof window !== "undefined" ? localStorage.getItem(localKey) : null;
+      const key = `tasks-overdue-${todayStr}`;
+
+      if (!firedRef.current.has(key) && lastFired !== todayStr) {
         firedRef.current.add(key);
+        if (typeof window !== "undefined") localStorage.setItem(localKey, todayStr);
+
         const alreadyNotified = notifications.some(
-          (n) => n.category === "task" && n.title.includes("overdue task") && isDateToday(n.createdAt)
+          (n) => n.category === "task" && n.title.includes("overdue") && isDateToday(n.createdAt)
         );
         if (!alreadyNotified) {
           add({
-            category: "task", icon: "⚠️",
+            category: "task",
+            icon: "⚠️",
             title: `${overdueTasks.length} overdue task${overdueTasks.length > 1 ? "s" : ""}`,
             body: overdueTasks.length === 1
               ? `"${overdueTasks[0].title || "Untitled"}" is past due`
@@ -241,18 +256,26 @@ export function useNotificationPoller({
     const dueTodayTasks = items.filter((i) => {
       if (i.type !== "task" || !i.due_date || i.completed || i.archived) return false;
       const due = new Date(i.due_date);
-      return due >= now && due.toDateString() === now.toDateString();
+      return due.toDateString() === now.toDateString();
     });
+
     if (dueTodayTasks.length > 0) {
-      const key = `tasks-due-today-${dueTodayTasks.length}-${now.toDateString()}`;
-      if (!firedRef.current.has(key)) {
+      const todayStr = now.toDateString();
+      const localKey = "lifepulse_last_due_today_notif_date";
+      const lastFired = typeof window !== "undefined" ? localStorage.getItem(localKey) : null;
+      const key = `tasks-due-today-${todayStr}`;
+
+      if (!firedRef.current.has(key) && lastFired !== todayStr) {
         firedRef.current.add(key);
+        if (typeof window !== "undefined") localStorage.setItem(localKey, todayStr);
+
         const alreadyNotified = notifications.some(
           (n) => n.category === "task" && n.title.includes("due today") && isDateToday(n.createdAt)
         );
         if (!alreadyNotified) {
           add({
-            category: "task", icon: "✅",
+            category: "task",
+            icon: "✅",
             title: `${dueTodayTasks.length} task${dueTodayTasks.length > 1 ? "s" : ""} due today`,
             body: dueTodayTasks.slice(0, 2).map((t) => t.title || "Untitled").join(", ") + (dueTodayTasks.length > 2 ? "…" : ""),
             link: "/tasks",
