@@ -1,4 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useUserProfile, useUpdateUserProfile } from "@/hooks/use-user-profile";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
@@ -33,6 +34,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [isMobile, setIsMobile] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const { isVisible, items: navItems } = useSidebarPreferences();
+  const { data: userProfile } = useUserProfile();
+  const updateProfile = useUpdateUserProfile();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -40,6 +43,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     const found = ALL_SIDEBAR_ITEMS.find((n) => pathname === n.to || pathname.startsWith(n.to + "/"));
     return found?.label ?? "LifePulse";
   })();
+
+  // Sync theme from backend when profile loads
+  useEffect(() => {
+    if (userProfile?.theme) {
+      const savedTheme = userProfile.theme as "dark" | "light";
+      setTheme(savedTheme);
+      localStorage.setItem(THEME_STORAGE_KEY, savedTheme);
+      if (savedTheme === "light") {
+        document.documentElement.classList.add("light");
+      } else {
+        document.documentElement.classList.remove("light");
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile?.theme]);
 
   useEffect(() => {
     const savedTheme = (localStorage.getItem(THEME_STORAGE_KEY) as "dark" | "light") || "dark";
@@ -64,6 +82,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     } else {
       document.documentElement.classList.remove("light");
     }
+    // Persist theme to backend
+    updateProfile.mutate({ theme: next });
   };
 
   useEffect(() => {

@@ -23,6 +23,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(u => u.Id);
             e.HasIndex(u => u.Email).IsUnique();
             e.Property(u => u.Email).IsRequired();
+            e.Property(u => u.DisplayName).HasMaxLength(100);
+            e.Property(u => u.AvatarUrl).HasMaxLength(1000);
+            e.Property(u => u.StatusMessage).HasMaxLength(200);
+            e.Property(u => u.Theme).HasMaxLength(20);
+            e.Property(u => u.HiddenSidebarItems).HasMaxLength(500);
         });
 
         // ── Folder ────────────────────────────────────────────

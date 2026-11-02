@@ -1,6 +1,11 @@
 export interface User {
   id: string;
   email: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  status_message?: string | null;
+  theme?: string | null;
+  hidden_sidebar_items?: string[] | null;
 }
 
 export interface AuthResponse {
@@ -229,6 +234,22 @@ class ApiClient {
           unsubscribe: () => window.removeEventListener("lifepulse-auth-change", handleCustom),
         },
       };
+    },
+  };
+
+  // Profile Operations
+  profile = {
+    get: (): Promise<User> => {
+      return this.get<User>("/api/auth/me");
+    },
+    update: (data: {
+      display_name?: string | null;
+      avatar_url?: string | null;
+      status_message?: string | null;
+      theme?: string | null;
+      hidden_sidebar_items?: string[] | null;
+    }): Promise<User> => {
+      return this.patch<User>("/api/auth/profile", data);
     },
   };
 

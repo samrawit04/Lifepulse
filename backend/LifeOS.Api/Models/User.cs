@@ -8,6 +8,13 @@ public class User
     public string? GoogleId { get; set; }        // set for Google OAuth users
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // Profile fields
+    public string? DisplayName { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? StatusMessage { get; set; }
+    public string? Theme { get; set; }
+    public string? HiddenSidebarItems { get; set; }  // JSON array string e.g. "["/sticky","/music"]"
+
     public ICollection<Folder> Folders { get; set; } = [];
     public ICollection<Item> Items { get; set; } = [];
     public ICollection<Expense> Expenses { get; set; } = [];
