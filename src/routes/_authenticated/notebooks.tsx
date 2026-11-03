@@ -1871,8 +1871,8 @@ function TableEditor({ block, onCellChange, onCellFocus, onCellBlur, onAddRow, o
   onRemove: () => void;
 }) {
   return (
-    <div className="group relative rounded-xl border border-black/15 bg-black/[0.02] dark:border-white/[0.12] dark:bg-white/[0.03] overflow-x-auto shadow-sm">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-black/10 bg-black/[0.03] dark:border-white/[0.08] dark:bg-white/[0.02]">
+    <div className="group relative rounded-xl border border-black/15 bg-black/[0.02] dark:border-white/25 dark:bg-white/[0.03] overflow-x-auto shadow-sm">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-black/10 bg-black/[0.03] dark:border-white/15 dark:bg-white/[0.02]">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 flex items-center gap-1.5">
           <Table2 className="h-3 w-3" /> Table
         </span>
@@ -1898,7 +1898,7 @@ function TableEditor({ block, onCellChange, onCellFocus, onCellBlur, onAddRow, o
         <thead>
           <tr>
             {block.rows[0]?.map((_, ci) => (
-              <th key={ci} className="border border-black/10 bg-black/[0.04] text-[10px] text-muted-foreground/70 font-medium text-center w-8 select-none dark:border-white/[0.09] dark:bg-white/[0.04]">
+              <th key={ci} className="border border-black/10 bg-black/[0.04] text-[10px] text-muted-foreground/70 font-medium text-center w-8 select-none dark:border-white/20 dark:bg-white/[0.04]">
                 {String.fromCharCode(65 + ci)}
               </th>
             ))}
@@ -1908,7 +1908,7 @@ function TableEditor({ block, onCellChange, onCellFocus, onCellBlur, onAddRow, o
           {block.rows.map((row, ri) => (
             <tr key={ri} className="group/row">
               {row.map((cell, ci) => (
-                <td key={ci} className="border border-black/10 dark:border-white/[0.09] p-0 relative">
+                <td key={ci} className="border border-black/10 dark:border-white/20 p-0 relative">
                   <input
                     value={cell}
                     onChange={(e) => onCellChange(ri, ci, e.target.value)}
