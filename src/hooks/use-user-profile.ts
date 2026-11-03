@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { useCurrentUser } from "@/hooks/use-lifeos";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/integrations/api/client";
+import type { User } from "@/integrations/api/client";
 
-export const PROFILE_STORAGE_KEY = "lifepulse.user_profile.v1";
+export const USER_PROFILE_KEY = ["user-profile"] as const;
 
 export interface UserProfileData {
   displayName: string;
@@ -20,44 +21,29 @@ export function deriveDefaultName(email?: string): string {
     .join(" ");
 }
 
+/** Returns the full user profile from the backend (GET /api/auth/me). */
 export function useUserProfile() {
-  const { data: user } = useCurrentUser();
-
-  const [profile, setProfile] = useState<UserProfileData>(() => {
-    if (typeof window === "undefined") {
-      return { displayName: "", avatarUrl: "", statusMessage: "" };
-    }
-    try {
-      const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : { displayName: "", avatarUrl: "", statusMessage: "" };
-    } catch {
-      return { displayName: "", avatarUrl: "", statusMessage: "" };
-    }
-  });
-
-  useEffect(() => {
-    const update = () => {
+  return useQuery<User | null>({
+    queryKey: USER_PROFILE_KEY,
+    queryFn: async () => {
       try {
-        const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-        if (raw) setProfile(JSON.parse(raw));
-      } catch {}
-    };
-    window.addEventListener("storage", update);
-    window.addEventListener("lifepulse:profile-updated", update);
-    return () => {
-      window.removeEventListener("storage", update);
-      window.removeEventListener("lifepulse:profile-updated", update);
-    };
-  }, []);
+        return await apiClient.profile.get();
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 1000 * 60 * 5, // 5 min
+  });
+}
 
-  const defaultName = deriveDefaultName(user?.email);
-  const displayName = profile.displayName.trim() || defaultName;
-
-  return {
-    user,
-    profile,
-    setProfile,
-    displayName,
-    defaultName,
-  };
+/** Mutation to PATCH /api/auth/profile. Invalidates the profile cache on success. */
+export function useUpdateUserProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof apiClient.profile.update>[0]) =>
+      apiClient.profile.update(data),
+    onSuccess: (updated) => {
+      qc.setQueryData(USER_PROFILE_KEY, updated);
+    },
+  });
 }

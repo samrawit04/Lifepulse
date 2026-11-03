@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { LogOut, Pencil, Camera, Check, Sparkles, X, User as UserIcon, Settings } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { LogOut, Pencil, Camera, Check, X, User as UserIcon, Settings } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,18 +22,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useCurrentUser } from "@/hooks/use-lifeos";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
-const PROFILE_STORAGE_KEY = "lifepulse.user_profile.v1";
-
-interface UserProfileData {
-  displayName: string;
-  avatarUrl: string;
-  statusMessage: string;
-}
+import { useUserProfile, useUpdateUserProfile, deriveDefaultName } from "@/hooks/use-user-profile";
 
 const PRESET_AVATARS = [
   { label: "Plant", url: "https://images.unsplash.com/photo-1545241047-6083a3684587?w=150&auto=format&fit=crop&q=80" },
@@ -43,19 +35,6 @@ const PRESET_AVATARS = [
   { label: "Cozy Cat", url: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=150&auto=format&fit=crop&q=80" },
   { label: "Art", url: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=150&auto=format&fit=crop&q=80" },
 ];
-
-function deriveDefaultName(email?: string): string {
-  if (!email) return "User";
-  const prefix = email.split("@")[0] || "User";
-  // remove numbers and special characters for a clean first name
-  const clean = prefix.replace(/[0-9._-]+/g, " ").trim();
-  if (!clean) return "User";
-  // capitalize words
-  return clean
-    .split(" ")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 function deriveInitials(name: string): string {
   const parts = name.trim().split(" ");
@@ -72,20 +51,9 @@ interface SidebarUserProfileProps {
 }
 
 export function SidebarUserProfile({ onSignOut, onOpenSettings, onCustomize }: SidebarUserProfileProps) {
-  const { data: user } = useCurrentUser();
+  const { data: user } = useUserProfile();
+  const updateProfile = useUpdateUserProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [profile, setProfile] = useState<UserProfileData>(() => {
-    if (typeof window === "undefined") {
-      return { displayName: "", avatarUrl: "", statusMessage: "" };
-    }
-    try {
-      const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : { displayName: "", avatarUrl: "", statusMessage: "" };
-    } catch {
-      return { displayName: "", avatarUrl: "", statusMessage: "" };
-    }
-  });
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
@@ -94,34 +62,34 @@ export function SidebarUserProfile({ onSignOut, onOpenSettings, onCustomize }: S
   const [editStatus, setEditStatus] = useState("");
   const [isUploading, setIsUploading] = useState(false);
 
-  // Sync default name if profile displayName is empty
+  // Derive display values from backend data
   const defaultName = deriveDefaultName(user?.email);
-  const displayName = profile.displayName.trim() || defaultName;
+  const displayName = (user?.display_name?.trim()) || defaultName;
+  const avatarUrl = user?.avatar_url || "";
+  const statusMessage = user?.status_message || "";
   const initials = deriveInitials(displayName);
 
   const handleOpenEdit = () => {
-    setEditName(profile.displayName || defaultName);
-    setEditAvatar(profile.avatarUrl || "");
-    setEditStatus(profile.statusMessage || "");
+    setEditName(user?.display_name || defaultName);
+    setEditAvatar(user?.avatar_url || "");
+    setEditStatus(user?.status_message || "");
     setIsEditOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updated: UserProfileData = {
-      displayName: editName.trim(),
-      avatarUrl: editAvatar.trim(),
-      statusMessage: editStatus.trim(),
-    };
-    setProfile(updated);
     try {
-      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(updated));
-      window.dispatchEvent(new CustomEvent("lifepulse:profile-updated", { detail: updated }));
+      await updateProfile.mutateAsync({
+        display_name: editName.trim() || null,
+        avatar_url: editAvatar.trim() || null,
+        status_message: editStatus.trim() || null,
+      });
       toast.success("Profile updated");
+      setIsEditOpen(false);
     } catch (err) {
       console.error(err);
+      toast.error("Failed to save profile");
     }
-    setIsEditOpen(false);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,8 +142,8 @@ export function SidebarUserProfile({ onSignOut, onOpenSettings, onCustomize }: S
           >
             <div className="relative shrink-0">
               <Avatar className="h-9 w-9 rounded-xl border border-white/10 bg-gradient-to-br from-primary/30 via-accent/20 to-primary/10 shadow-sm">
-                {profile.avatarUrl ? (
-                  <AvatarImage src={profile.avatarUrl} alt={displayName} className="object-cover rounded-xl" />
+                {avatarUrl ? (
+                  <AvatarImage src={avatarUrl} alt={displayName} className="object-cover rounded-xl" />
                 ) : null}
                 <AvatarFallback className="rounded-xl bg-gradient-to-br from-primary/30 to-primary/10 text-primary font-bold text-xs">
                   {initials}
@@ -193,9 +161,9 @@ export function SidebarUserProfile({ onSignOut, onOpenSettings, onCustomize }: S
               </div>
               <p
                 className="truncate text-[10px] text-muted-foreground/80 leading-tight mt-0.5"
-                title={profile.statusMessage || "Personal Workspace"}
+                title={statusMessage || "Personal Workspace"}
               >
-                {profile.statusMessage || "Personal Workspace"}
+                {statusMessage || "Personal Workspace"}
               </p>
             </div>
           </button>
@@ -350,10 +318,11 @@ export function SidebarUserProfile({ onSignOut, onOpenSettings, onCustomize }: S
               <Button
                 type="submit"
                 size="sm"
+                disabled={updateProfile.isPending || isUploading}
                 className="rounded-xl h-9 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 px-4"
               >
                 <Check className="h-3.5 w-3.5 mr-1" />
-                Save Profile
+                {updateProfile.isPending ? "Saving…" : "Save Profile"}
               </Button>
             </DialogFooter>
           </form>

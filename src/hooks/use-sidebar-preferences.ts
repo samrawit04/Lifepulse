@@ -10,6 +10,9 @@ import {
   Music,
   Archive,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/integrations/api/client";
+import { USER_PROFILE_KEY } from "@/hooks/use-user-profile";
 
 export function PinterestIcon({ className }: { className?: string }) {
   return createElement(
@@ -87,79 +90,108 @@ export const ALL_SIDEBAR_ITEMS: SidebarConfigItem[] = [
   },
 ];
 
+// Fallback localStorage key (used as initial value before backend loads)
 const PREFS_STORAGE_KEY = "lifepulse.sidebar.preferences.v1";
-const PREFS_EVENT_NAME = "lifepulse:sidebar-prefs-updated";
 
 export type SidebarPreferences = Record<string, boolean>;
 
-function getInitialPreferences(): SidebarPreferences {
-  if (typeof window === "undefined") {
-    const defaults: SidebarPreferences = {};
-    ALL_SIDEBAR_ITEMS.forEach((item) => {
-      defaults[item.to] = true;
+function buildDefaultPrefs(): SidebarPreferences {
+  const defaults: SidebarPreferences = {};
+  ALL_SIDEBAR_ITEMS.forEach((item) => {
+    defaults[item.to] = true;
+  });
+  return defaults;
+}
+
+function hiddenArrayToPrefs(hiddenItems: string[] | null | undefined): SidebarPreferences {
+  const prefs = buildDefaultPrefs();
+  if (hiddenItems) {
+    hiddenItems.forEach((route) => {
+      prefs[route] = false;
     });
-    return defaults;
   }
+  // Required items always visible
+  ALL_SIDEBAR_ITEMS.forEach((item) => {
+    if (item.required) prefs[item.to] = true;
+  });
+  return prefs;
+}
+
+function prefsToHiddenArray(prefs: SidebarPreferences): string[] {
+  return ALL_SIDEBAR_ITEMS.filter(
+    (item) => !item.required && prefs[item.to] === false
+  ).map((item) => item.to);
+}
+
+function getLocalPrefs(): SidebarPreferences {
   try {
     const raw = localStorage.getItem(PREFS_STORAGE_KEY);
-    if (!raw) {
-      const defaults: SidebarPreferences = {};
-      ALL_SIDEBAR_ITEMS.forEach((item) => {
-        defaults[item.to] = true;
-      });
-      return defaults;
-    }
+    if (!raw) return buildDefaultPrefs();
     const parsed = JSON.parse(raw) as SidebarPreferences;
-    // Ensure all registered items exist
     ALL_SIDEBAR_ITEMS.forEach((item) => {
-      if (item.required) {
-        parsed[item.to] = true;
-      } else if (parsed[item.to] === undefined) {
-        parsed[item.to] = true;
-      }
+      if (item.required) parsed[item.to] = true;
+      else if (parsed[item.to] === undefined) parsed[item.to] = true;
     });
     return parsed;
   } catch {
-    const defaults: SidebarPreferences = {};
-    ALL_SIDEBAR_ITEMS.forEach((item) => {
-      defaults[item.to] = true;
-    });
-    return defaults;
+    return buildDefaultPrefs();
   }
 }
 
 export function useSidebarPreferences() {
-  const [preferences, setPreferences] = useState<SidebarPreferences>(getInitialPreferences);
+  const qc = useQueryClient();
+  const [preferences, setPreferences] = useState<SidebarPreferences>(getLocalPrefs);
 
+  // Sync from backend profile when it loads
   useEffect(() => {
-    const handleUpdate = () => {
-      setPreferences(getInitialPreferences());
-    };
-
-    window.addEventListener(PREFS_EVENT_NAME, handleUpdate);
-    window.addEventListener("storage", handleUpdate);
-
-    return () => {
-      window.removeEventListener(PREFS_EVENT_NAME, handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
-    };
+    const profileData = qc.getQueryData<{ hidden_sidebar_items?: string[] | null }>(USER_PROFILE_KEY);
+    if (profileData !== undefined) {
+      const prefs = hiddenArrayToPrefs(profileData?.hidden_sidebar_items);
+      setPreferences(prefs);
+    }
+  // Subscribe to profile cache changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const savePreferences = useCallback((newPrefs: SidebarPreferences) => {
-    // Ensure required items are always true
-    ALL_SIDEBAR_ITEMS.forEach((item) => {
-      if (item.required) {
-        newPrefs[item.to] = true;
+  // Watch profile query cache for updates
+  useEffect(() => {
+    return qc.getQueryCache().subscribe((event) => {
+      if (
+        event.type === "updated" &&
+        JSON.stringify(event.query.queryKey) === JSON.stringify(USER_PROFILE_KEY)
+      ) {
+        const data = event.query.state.data as { hidden_sidebar_items?: string[] | null } | null;
+        if (data !== undefined) {
+          const prefs = hiddenArrayToPrefs(data?.hidden_sidebar_items);
+          setPreferences(prefs);
+        }
       }
     });
-    try {
-      localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(newPrefs));
-    } catch (e) {
-      console.error("Failed to save sidebar preferences", e);
-    }
-    setPreferences(newPrefs);
-    window.dispatchEvent(new CustomEvent(PREFS_EVENT_NAME));
-  }, []);
+  }, [qc]);
+
+  const savePreferences = useCallback(
+    async (newPrefs: SidebarPreferences) => {
+      // Ensure required items are always true
+      ALL_SIDEBAR_ITEMS.forEach((item) => {
+        if (item.required) newPrefs[item.to] = true;
+      });
+      setPreferences(newPrefs);
+      // Save to localStorage as fallback
+      try {
+        localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(newPrefs));
+      } catch {}
+
+      // Persist to backend
+      const hiddenItems = prefsToHiddenArray(newPrefs);
+      try {
+        const updated = await apiClient.profile.update({ hidden_sidebar_items: hiddenItems });
+        qc.setQueryData(USER_PROFILE_KEY, updated);
+      } catch (e) {
+        console.error("Failed to save sidebar preferences to backend", e);
+      }
+    },
+    [qc]
+  );
 
   const toggleItem = useCallback(
     (to: string) => {
@@ -197,19 +229,11 @@ export function useSidebarPreferences() {
   );
 
   const resetToDefault = useCallback(() => {
-    const defaults: SidebarPreferences = {};
-    ALL_SIDEBAR_ITEMS.forEach((item) => {
-      defaults[item.to] = true;
-    });
-    savePreferences(defaults);
+    savePreferences(buildDefaultPrefs());
   }, [savePreferences]);
 
   const showAll = useCallback(() => {
-    const all: SidebarPreferences = {};
-    ALL_SIDEBAR_ITEMS.forEach((item) => {
-      all[item.to] = true;
-    });
-    savePreferences(all);
+    savePreferences(buildDefaultPrefs());
   }, [savePreferences]);
 
   return {

@@ -53,12 +53,64 @@ public class AuthController(AppDbContext db, TokenService tokenService, GoogleAu
     // ── GET /api/auth/me ────────────────────────────────────────────────────
     [Authorize]
     [HttpGet("me")]
-    public async Task<ActionResult<UserDto>> Me()
+    public async Task<ActionResult<UserProfileDto>> Me()
     {
         var userId = TokenService.GetUserId(User);
         var user = await db.Users.FindAsync(userId);
         if (user is null) return NotFound();
-        return Ok(new UserDto(user.Id, user.Email));
+
+        string[]? hiddenItems = null;
+        if (!string.IsNullOrEmpty(user.HiddenSidebarItems))
+        {
+            try { hiddenItems = System.Text.Json.JsonSerializer.Deserialize<string[]>(user.HiddenSidebarItems); }
+            catch { /* ignore bad JSON */ }
+        }
+
+        return Ok(new UserProfileDto(
+            user.Id,
+            user.Email,
+            user.DisplayName,
+            user.AvatarUrl,
+            user.StatusMessage,
+            user.Theme,
+            hiddenItems
+        ));
+    }
+
+    // ── PATCH /api/auth/profile ──────────────────────────────────────────────
+    [Authorize]
+    [HttpPatch("profile")]
+    public async Task<ActionResult<UserProfileDto>> UpdateProfile([FromBody] UpdateProfileRequest req)
+    {
+        var userId = TokenService.GetUserId(User);
+        var user = await db.Users.FindAsync(userId);
+        if (user is null) return NotFound();
+
+        if (req.DisplayName is not null) user.DisplayName = req.DisplayName.Trim().Length == 0 ? null : req.DisplayName.Trim();
+        if (req.AvatarUrl is not null) user.AvatarUrl = req.AvatarUrl.Trim().Length == 0 ? null : req.AvatarUrl.Trim();
+        if (req.StatusMessage is not null) user.StatusMessage = req.StatusMessage.Trim().Length == 0 ? null : req.StatusMessage.Trim();
+        if (req.Theme is not null) user.Theme = req.Theme;
+        if (req.HiddenSidebarItems is not null)
+            user.HiddenSidebarItems = System.Text.Json.JsonSerializer.Serialize(req.HiddenSidebarItems);
+
+        await db.SaveChangesAsync();
+
+        string[]? hiddenItems = null;
+        if (!string.IsNullOrEmpty(user.HiddenSidebarItems))
+        {
+            try { hiddenItems = System.Text.Json.JsonSerializer.Deserialize<string[]>(user.HiddenSidebarItems); }
+            catch { /* ignore bad JSON */ }
+        }
+
+        return Ok(new UserProfileDto(
+            user.Id,
+            user.Email,
+            user.DisplayName,
+            user.AvatarUrl,
+            user.StatusMessage,
+            user.Theme,
+            hiddenItems
+        ));
     }
 
     // ── GET /api/auth/google ─────────────────────────────────────────────────
