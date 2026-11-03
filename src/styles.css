@@ -450,4 +450,20 @@ html.light .text-gradient-primary {
     display: none;
   }
 }
-
+
+/* Table editor - light mode border overrides */
+.light .table-editor-wrapper {
+  border-color: oklch(0 0 0 / 0.12);
+  background-color: oklch(0 0 0 / 0.01);
+}
+.light .table-editor-header {
+  border-color: oklch(0 0 0 / 0.08);
+  background-color: oklch(0 0 0 / 0.02);
+}
+.light .table-editor-th {
+  border-color: oklch(0 0 0 / 0.1);
+  background-color: oklch(0 0 0 / 0.03);
+}
+.light .table-editor-td {
+  border-color: oklch(0 0 0 / 0.1);
+}
