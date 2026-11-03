@@ -121,6 +121,23 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
     }));
   };
 
+  const handleQuickAddNotebook = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    createFolder.mutate(
+      { name: "New Notebook", parent_folder_id: null },
+      {
+        onSuccess: (newFolder) => {
+          toast.success("Notebook created");
+          setRootExpanded(true);
+          navigate({
+            to: "/notebooks",
+            search: { folderId: newFolder.id, pageId: undefined },
+          });
+        },
+      }
+    );
+  };
+
   const handleQuickAddPage = (folderId: string | null, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!folderId) {
@@ -406,6 +423,16 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
           />
           <span className="truncate text-sm font-medium">Notebooks</span>
         </div>
+
+        {/* Quick add notebook button */}
+        <button
+          type="button"
+          title="New notebook"
+          onClick={handleQuickAddNotebook}
+          className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-primary transition-all shrink-0"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {/* Collapsible Tree Body */}
