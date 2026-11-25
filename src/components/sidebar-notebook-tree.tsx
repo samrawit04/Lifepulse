@@ -18,28 +18,8 @@ import type { Folder as FolderType, Item } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
-
-const PINNED_FOLDERS_KEY = "lifepulse.pinned_folders";
-
-function usePinnedFolders() {
-  const [pinnedFolderIds, setPinnedFolderIds] = useState<Set<string>>(() => {
-    try {
-      const raw = localStorage.getItem(PINNED_FOLDERS_KEY);
-      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
-    } catch { return new Set(); }
-  });
-
-  const togglePinFolder = (id: string) => {
-    setPinnedFolderIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem(PINNED_FOLDERS_KEY, JSON.stringify([...next]));
-      return next;
-    });
-  };
-
-  return { pinnedFolderIds, togglePinFolder };
-}
+import { NewPageDialog } from "@/components/new-page-dialog";
+import { usePinnedFolders } from "@/hooks/use-pinned-folders";
 
 interface SidebarNotebookTreeProps {
   currentPath: string;
@@ -138,22 +118,30 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
     );
   };
 
+  // Folder awaiting a page name in the "new page" wizard
+  const [newPageFolderId, setNewPageFolderId] = useState<string | null>(null);
+
   const handleQuickAddPage = (folderId: string | null, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!folderId) {
       toast.error("Open or create a folder first to add pages");
       return;
     }
+    setNewPageFolderId(folderId);
+  };
+
+  const createPageInFolder = (folderId: string, title: string) => {
     createItem.mutate(
       {
         type: "notebook_page",
-        title: "Untitled",
+        title,
         content: JSON.stringify({ version: 2, blocks: [{ id: `b-${Date.now()}`, kind: "text", content: "" }] }),
         folder_id: folderId,
       },
       {
         onSuccess: (newPage) => {
           toast.success("New page created");
+          setNewPageFolderId(null);
           setExpandedFolders((prev) => ({ ...prev, [folderId]: true }));
           navigate({
             to: "/notebooks",
@@ -249,7 +237,7 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                 )}
 
                 {/* Folder Actions on hover */}
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-1 shrink-0 transition-opacity">
+                <div className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 flex items-center gap-0.5 ml-1 shrink-0 transition-opacity">
                   {/* Pin/Unpin folder */}
                   <button
                     type="button"
@@ -333,7 +321,7 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                 )}
 
                 {/* Page actions on hover */}
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-1 shrink-0 transition-opacity">
+                <div className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 flex items-center gap-0.5 ml-1 shrink-0 transition-opacity">
                   {/* Pin/Unpin page */}
                   <button
                     type="button"
@@ -429,7 +417,7 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
           type="button"
           title="New notebook"
           onClick={handleQuickAddNotebook}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-primary transition-all shrink-0"
+          className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-primary transition-all shrink-0"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -441,6 +429,14 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
           {renderSubTree(null, 0)}
         </div>
       )}
+
+      <NewPageDialog
+        open={newPageFolderId !== null}
+        onOpenChange={(o) => !o && setNewPageFolderId(null)}
+        notebookName={folders.find((f) => f.id === newPageFolderId)?.name ?? null}
+        isPending={createItem.isPending}
+        onCreate={(title) => newPageFolderId && createPageInFolder(newPageFolderId, title)}
+      />
 
       {/* App Custom Popup Delete Confirmation Dialog */}
       <ConfirmDeleteDialog

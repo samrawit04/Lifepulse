@@ -56,6 +56,8 @@ export function useCreateItem() {
         tags: input.tags ?? [],
         due_date: input.due_date ?? null,
         event_date: input.event_date ?? null,
+        start_at: input.start_at ?? null,
+        end_at: input.end_at ?? null,
         pos_x: input.pos_x ?? null,
         pos_y: input.pos_y ?? null,
         width: input.width ?? null,
@@ -102,6 +104,12 @@ export function useUpdateItem() {
       if (patch.event_date === null) {
         apiPatch.clear_event_date = true;
         apiPatch.clearEventDate = true;
+      }
+      if (patch.start_at === null) {
+        apiPatch.clear_start_at = true;
+      }
+      if (patch.end_at === null) {
+        apiPatch.clear_end_at = true;
       }
 
       return apiClient.patch<Item>(`/api/items/${id}`, apiPatch);

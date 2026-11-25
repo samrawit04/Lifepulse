@@ -253,6 +253,18 @@ class ApiClient {
     },
   };
 
+  // Per-user settings (server-side key/value preferences)
+  settings = {
+    get: async <T,>(key: string): Promise<T | null> => {
+      const res = await this.get<{ key: string; value?: T | null }>(`/api/settings/${encodeURIComponent(key)}`);
+      return res?.value ?? null;
+    },
+    put: async <T,>(key: string, value: T): Promise<T> => {
+      const res = await this.put<{ key: string; value: T }>(`/api/settings/${encodeURIComponent(key)}`, { value });
+      return res.value;
+    },
+  };
+
   // Playlists Operations
   playlists = {
     getAll: async (): Promise<Playlist[]> => {

@@ -157,6 +157,9 @@ namespace LifeOS.Api.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("EndAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("EventDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -177,6 +180,9 @@ namespace LifeOS.Api.Migrations
 
                     b.Property<string>("Priority")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("StartAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.PrimitiveCollection<string[]>("Tags")
                         .IsRequired()
@@ -416,6 +422,38 @@ namespace LifeOS.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.UserSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("UserSettings");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.CategoryBudget", b =>
                 {
                     b.HasOne("LifeOS.Api.Models.User", "User")
@@ -518,6 +556,17 @@ namespace LifeOS.Api.Migrations
                     b.Navigation("Playlist");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.UserSetting", b =>
+                {
+                    b.HasOne("LifeOS.Api.Models.User", "User")
+                        .WithMany("Settings")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Folder", b =>
                 {
                     b.Navigation("Children");
@@ -543,6 +592,8 @@ namespace LifeOS.Api.Migrations
                     b.Navigation("PlannedPurchases");
 
                     b.Navigation("Playlists");
+
+                    b.Navigation("Settings");
                 });
 #pragma warning restore 612, 618
         }

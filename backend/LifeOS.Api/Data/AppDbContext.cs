@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<PlannedPurchase> PlannedPurchases => Set<PlannedPurchase>();
     public DbSet<CategoryBudget> CategoryBudgets => Set<CategoryBudget>();
+    public DbSet<UserSetting> UserSettings => Set<UserSetting>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -166,6 +167,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(b => b.Category).HasMaxLength(100).IsRequired();
             e.HasIndex(b => new { b.UserId, b.Category }).IsUnique();
         });
+
+        // ── UserSetting (per-user key/value preferences, JSON values) ────────
+        model.Entity<UserSetting>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.HasOne(s => s.User)
+             .WithMany(u => u.Settings)
+             .HasForeignKey(s => s.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.Property(s => s.Key).HasMaxLength(100).IsRequired();
+            e.Property(s => s.Value).HasColumnType("text").IsRequired();
+            e.HasIndex(s => new { s.UserId, s.Key }).IsUnique();
+        });
     }
 
     // Auto-update UpdatedAt on every SaveChanges
@@ -182,6 +197,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 if (entry.Entity is Playlist p) p.UpdatedAt = now;
                 if (entry.Entity is PlannedPurchase pp) pp.UpdatedAt = now;
                 if (entry.Entity is CategoryBudget cb) cb.UpdatedAt = now;
+                if (entry.Entity is UserSetting us) us.UpdatedAt = now;
             }
         }
         return base.SaveChangesAsync(ct);

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useUserSetting } from "@/hooks/use-user-setting";
 import { apiClient, type PinterestPin } from "@/integrations/api/client";
 
 export const Route = createFileRoute("/_authenticated/pinterest")({
@@ -36,6 +37,8 @@ const DEFAULT_TAGS = [
   "dark academia", "mood board aesthetic", "cozy cafe vibes",
   "calm wallpapers", "bullet journal", "vision board goals",
 ];
+
+const NO_PINS: PinterestPin[] = [];
 
 // ─── Curated themes ───────────────────────────────────────────────────────────
 const CURATED = [
@@ -251,41 +254,24 @@ function PinterestPage() {
   const [searchResults, setSearchResults] = useState<PinterestPin[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [savedPins, setSavedPins] = useState<PinterestPin[]>([]);
   const [activeTab, setActiveTab] = useState<"search" | "saved" | "curated">("search");
   const [nextBookmark, setNextBookmark] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [quickTags, setQuickTags] = useState<string[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTagInput, setNewTagInput] = useState("");
   const lastQueryRef = useRef("");
 
-  // Load persisted data
-  useEffect(() => {
-    const tags = localStorage.getItem("lifepulse.pinterest.quicktags");
-    setQuickTags(tags ? (JSON.parse(tags) as string[]) : DEFAULT_TAGS);
-
-    const pins = localStorage.getItem("lifepulse.pinterest.savedpins");
-    if (pins) {
-      try { setSavedPins(JSON.parse(pins)); } catch { /* skip */ }
-    }
-  }, []);
-
-  const persistTags = (tags: string[]) => {
-    setQuickTags(tags);
-    localStorage.setItem("lifepulse.pinterest.quicktags", JSON.stringify(tags));
-  };
+  // Quick tags & saved pins live on the server (per user)
+  const { value: quickTags, save: persistTags } = useUserSetting<string[]>("pinterest-quick-tags", DEFAULT_TAGS);
+  const { value: savedPins, save: persistSavedPins } = useUserSetting<PinterestPin[]>("pinterest-saved-pins", NO_PINS);
 
   const toggleSavePin = (pin: PinterestPin) => {
-    setSavedPins(prev => {
-      const exists = prev.some(p => p.id === pin.id || p.imageUrl === pin.imageUrl);
-      const updated = exists
-        ? prev.filter(p => p.id !== pin.id && p.imageUrl !== pin.imageUrl)
-        : [pin, ...prev];
-      localStorage.setItem("lifepulse.pinterest.savedpins", JSON.stringify(updated));
-      toast.success(exists ? "Removed from saved collection" : "Pin saved to LifePulse!");
-      return updated;
-    });
+    const exists = savedPins.some(p => p.id === pin.id || p.imageUrl === pin.imageUrl);
+    const updated = exists
+      ? savedPins.filter(p => p.id !== pin.id && p.imageUrl !== pin.imageUrl)
+      : [pin, ...savedPins];
+    persistSavedPins(updated);
+    toast.success(exists ? "Removed from saved collection" : "Pin saved to LifePulse!");
   };
 
   const handleSearch = useCallback(async (queryOverride?: string, bookmarkToUse?: string) => {

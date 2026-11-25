@@ -31,7 +31,6 @@ import {
   SwitchCamera,
   Pin,
   PinOff,
-  Palette,
 } from "lucide-react";
 import {
   useCreateFolder,
@@ -44,7 +43,8 @@ import {
   useUpdateItem,
 } from "@/hooks/use-lifeos";
 import type { Folder, Item } from "@/lib/lifeos-types";
-import { NOTE_COLORS, notebookPageBackground } from "@/lib/lifeos-types";
+import { usePinnedFolders } from "@/hooks/use-pinned-folders";
+import { NewPageDialog } from "@/components/new-page-dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -166,21 +166,9 @@ function Notebooks() {
 
   const [newName, setNewName] = useState("");
 
-  // ── Pinned folders (localStorage) ──────────────────────────────────────────
-  const [pinnedFolderIds, setPinnedFolderIds] = useState<Set<string>>(() => {
-    try {
-      const raw = localStorage.getItem("lifepulse.pinned_folders");
-      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
-    } catch { return new Set(); }
-  });
-  const togglePinFolder = (id: string) => {
-    setPinnedFolderIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem("lifepulse.pinned_folders", JSON.stringify([...next]));
-      return next;
-    });
-  };
+  // ── Pinned folders (stored on the server per user) ─────────────────────────
+  const { pinnedFolderIds, togglePinFolder } = usePinnedFolders();
+  const [newPageOpen, setNewPageOpen] = useState(false);
 
   const search = Route.useSearch();
   const selectedFolderId = search.folderId ?? null;
@@ -265,22 +253,33 @@ function Notebooks() {
     setNewName("");
   };
 
+  // Opens the "name your page" wizard; the page is created on submit.
   const addPage = () => {
     if (!selectedFolderId) return toast.error("Choose a notebook first");
+    setNewPageOpen(true);
+  };
+
+  const createPage = (pageTitle: string) => {
+    if (!selectedFolderId) return;
+    const folderId = selectedFolderId;
     createItem.mutate(
       {
         type: "notebook_page",
-        title: "Untitled",
+        title: pageTitle,
         content: serializeBlocks([{ id: genId(), kind: "text", content: "" }]),
-        folder_id: selectedFolderId,
+        folder_id: folderId,
       },
       {
         onSuccess: (newPage) => {
-          openPage(selectedFolderId, newPage.id);
+          setNewPageOpen(false);
+          openPage(folderId, newPage.id);
         },
+        onError: (err) => toast.error(err.message || "Could not create page"),
       }
     );
   };
+
+  const selectedFolderName = folders.find((f) => f.id === selectedFolderId)?.name ?? null;
 
   const handleCreateSubFolder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -315,11 +314,11 @@ function Notebooks() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)] lg:h-screen bg-cozy-grain">
-      {/* ── Compact Breadcrumb Header ── */}
-      <header className="flex items-center justify-between border-b border-white/[0.06] px-4 py-1.5 bg-background/40 backdrop-blur-md shrink-0 min-h-0">
+    <div className="flex flex-col h-[calc(100dvh-48px)] lg:h-dvh bg-cozy-grain">
+      {/* ── Compact Breadcrumb Header ── (stacks on small screens) */}
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] px-3 sm:px-4 py-2 sm:py-1.5 bg-background/40 backdrop-blur-md shrink-0 min-h-0">
         {/* Breadcrumbs — very compact */}
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none whitespace-nowrap">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-none whitespace-nowrap">
           <button
             onClick={() => openFolder(null)}
             className={cn(
@@ -362,21 +361,21 @@ function Notebooks() {
 
         {/* Actions — only on list view */}
         {!search.pageId && (
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex w-full sm:w-auto items-center gap-1.5 shrink-0">
             {selectedFolderId === null ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex w-full sm:w-auto items-center gap-1.5">
                 <Input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="New notebook…"
-                  className="h-7 w-32 sm:w-44 text-xs border-white/10 bg-white/[0.03]"
+                  className="h-9 sm:h-7 flex-1 sm:flex-none sm:w-44 text-sm sm:text-xs border-white/10 bg-white/[0.03]"
                   onKeyDown={(e) => e.key === "Enter" && addRoot()}
                 />
                 <Button
                   onClick={addRoot}
                   size="sm"
                   disabled={createFolder.isPending}
-                  className="h-7 px-2.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="h-9 sm:h-7 px-3 sm:px-2.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {createFolder.isPending ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -389,27 +388,27 @@ function Notebooks() {
                 </Button>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex w-full sm:w-auto items-center gap-1.5">
                 <Button
                   onClick={() => { setCreateSubFolderParentId(selectedFolderId); setCreateSubFolderName(""); }}
                   variant="outline" size="sm"
-                  className="h-7 px-2.5 text-xs border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
+                  className="h-9 sm:h-7 flex-1 sm:flex-none px-2.5 text-xs border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
                 >
-                  <FolderPlus className="h-3.5 w-3.5 sm:mr-1" />
-                  <span className="hidden sm:inline">Sub-notebook</span>
+                  <FolderPlus className="h-3.5 w-3.5 mr-1" />
+                  <span>Sub-notebook</span>
                 </Button>
                 <Button
                   onClick={addPage}
                   size="sm"
                   disabled={createItem.isPending}
-                  className="h-7 px-2.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="h-9 sm:h-7 flex-1 sm:flex-none px-2.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {createItem.isPending ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <>
-                      <Plus className="h-3.5 w-3.5 sm:mr-1" />
-                      <span className="hidden sm:inline">New page</span>
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      <span>New page</span>
                     </>
                   )}
                 </Button>
@@ -417,7 +416,7 @@ function Notebooks() {
                   onClick={() => setDeleteFolderId(selectedFolderId)}
                   variant="outline" size="sm"
                   title="Delete this notebook"
-                  className="h-7 px-2 text-xs border-destructive/20 text-destructive hover:bg-destructive/15"
+                  className="h-9 sm:h-7 px-2.5 sm:px-2 text-xs border-destructive/20 text-destructive hover:bg-destructive/15"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   <span className="hidden md:inline ml-1">Delete</span>
@@ -453,7 +452,7 @@ function Notebooks() {
             </div>
           )
         ) : (
-          <div className="p-5 max-w-5xl mx-auto space-y-8">
+          <div className="px-3 py-4 sm:p-5 max-w-5xl mx-auto space-y-6 sm:space-y-8">
             {/* Notebooks grid */}
             {(currentFolders.length > 0 || selectedFolderId === null) && (
               <section>
@@ -545,8 +544,16 @@ function Notebooks() {
       </div>
 
       {/* ── Dialogs ── */}
+      <NewPageDialog
+        open={newPageOpen}
+        onOpenChange={setNewPageOpen}
+        notebookName={selectedFolderName}
+        isPending={createItem.isPending}
+        onCreate={createPage}
+      />
+
       <Dialog open={createSubFolderParentId !== null} onOpenChange={(o) => !o && setCreateSubFolderParentId(null)}>
-        <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl sm:max-w-sm p-6">
+        <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl w-[calc(100vw-2rem)] sm:max-w-sm p-5 sm:p-6">
           <form onSubmit={handleCreateSubFolder}>
             <DialogHeader><DialogTitle className="font-display text-lg font-bold text-foreground">New sub-notebook</DialogTitle></DialogHeader>
             <div className="py-4">
@@ -563,7 +570,7 @@ function Notebooks() {
       </Dialog>
 
       <Dialog open={renameFolderId !== null} onOpenChange={(o) => !o && setRenameFolderId(null)}>
-        <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl sm:max-w-sm p-6">
+        <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl w-[calc(100vw-2rem)] sm:max-w-sm p-5 sm:p-6">
           <form onSubmit={handleRenameFolder}>
             <DialogHeader><DialogTitle className="font-display text-lg font-bold text-foreground">Rename notebook</DialogTitle></DialogHeader>
             <div className="py-4">
@@ -616,7 +623,7 @@ function NotebookCard({ folder, colorAccent, isPinned, onPin, onClick, onRename,
           <h3 className="font-display font-semibold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-2">{folder.name}</h3>
           <p className="text-[10px] text-muted-foreground mt-0.5">{pageCount} {pageCount === 1 ? "page" : "pages"}</p>
         </div>
-        <div className="flex opacity-0 group-hover:opacity-100 transition-opacity gap-0.5 shrink-0 mr-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity gap-0.5 shrink-0 mr-3" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onPin}
             title={isPinned ? "Unpin notebook" : "Pin notebook"}
@@ -641,29 +648,21 @@ function NotebookCard({ folder, colorAccent, isPinned, onPin, onClick, onRename,
 
 function PageCard({ page, onClick, onPinToggle }: { page: Item; onClick: () => void; onPinToggle: () => void }) {
   const preview = useMemo(() => blockPreview(page.content), [page.content]);
-  const pageColor = page.color ? NOTE_COLORS.find(c => c.value === page.color) : null;
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        "group relative flex items-start gap-4 text-left w-full p-4 rounded-2xl bg-card/40 border border-white/[0.05] hover:bg-card/70 hover:border-white/[0.12] hover:shadow-note transition-all duration-300 overflow-hidden",
+        "group relative flex items-start gap-3 sm:gap-4 text-left w-full p-3 sm:p-4 rounded-2xl bg-card/40 border border-white/[0.05] hover:bg-card/70 hover:border-white/[0.12] hover:shadow-note transition-all duration-300 overflow-hidden",
         page.pinned && "ring-1 ring-primary/20 border-primary/10"
       )}
     >
-      {/* Color stripe accent */}
-      {pageColor && (
-        <div
-          className="absolute left-0 top-0 bottom-0 w-1.5"
-          style={{ background: `linear-gradient(to bottom, ${pageColor.from}, ${pageColor.to})` }}
-        />
-      )}
       {page.pinned && (
         <div className="absolute top-2.5 right-2.5">
           <Pin className="h-3 w-3 text-primary fill-primary opacity-50" />
         </div>
       )}
-      <div className={cn("hidden sm:flex flex-col items-center gap-1 shrink-0 pt-1", pageColor && "ml-2")}>
+      <div className="hidden sm:flex flex-col items-center gap-1 shrink-0 pt-1">
         <div className="h-4 w-4 rounded-full border-2 border-primary/40 bg-background group-hover:border-primary group-hover:bg-primary/20 transition-all flex items-center justify-center">
           <div className="h-1 w-1 rounded-full bg-primary/60 group-hover:bg-primary" />
         </div>
@@ -683,7 +682,7 @@ function PageCard({ page, onClick, onPinToggle }: { page: Item; onClick: () => v
               title={page.pinned ? "Unpin page" : "Pin page"}
               onClick={(e) => { e.stopPropagation(); onPinToggle(); }}
               className={cn(
-                "p-0.5 rounded transition-all opacity-0 group-hover:opacity-100",
+                "p-1 sm:p-0.5 rounded transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
                 page.pinned
                   ? "text-primary opacity-100 hover:text-primary/60"
                   : "text-muted-foreground hover:text-primary"
@@ -721,9 +720,6 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
 }) {
   const [blocks, setBlocks] = useState<Block[]>(() => parseBlocks(page.content));
   const [title, setTitle] = useState(page.title ?? "");
-  const [pageColor, setPageColor] = useState<string | null>(page.color ?? null);
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const colorBtnRef = useRef<HTMLButtonElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
@@ -781,12 +777,6 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
         });
       }
     };
-  }, []);
-
-  const applyColor = useCallback((colorValue: string | null) => {
-    setPageColor(colorValue);
-    onChangeRef.current({ color: colorValue });
-    setShowColorPicker(false);
   }, []);
 
   const updateText = (id: string, content: string) => {
@@ -1093,16 +1083,12 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
     return result;
   }, [blocks]);
 
-  // Derive ultra-light subtle atmospheric mood wash
-  const editorBg = pageColor ? notebookPageBackground(pageColor) : undefined;
-
   return (
     <>
       <div className="flex flex-col h-full overflow-hidden">
         {/* ── Scrollable writing area ── */}
         <div
-          className="flex-1 overflow-auto min-h-0 relative transition-all duration-500"
-          style={editorBg}
+          className="flex-1 overflow-auto min-h-0 relative"
           onPaste={handlePaste}
         >
           {/* Paste hint toast */}
@@ -1111,7 +1097,7 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
               {pasteHint}
             </div>
           )}
-          <div className="mx-auto max-w-4xl px-4 pt-5 pb-6">
+          <div className="mx-auto max-w-4xl px-3 sm:px-6 pt-4 sm:pt-5 pb-16 sm:pb-6">
             <input
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
@@ -1120,7 +1106,7 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
               }}
               onBlur={() => save()}
               placeholder="Title"
-              className="w-full bg-transparent font-display text-2xl sm:text-3xl font-semibold text-foreground placeholder:text-muted-foreground/25 focus:outline-none leading-tight"
+              className="w-full bg-transparent font-display text-xl sm:text-3xl font-semibold text-foreground placeholder:text-muted-foreground/25 focus:outline-none leading-tight"
             />
             <p className="text-[10px] text-muted-foreground/40 mt-1 mb-4 font-medium tracking-wider uppercase">
               {format(new Date(page.updated_at), "EEEE, MMM d · yyyy")}
@@ -1202,9 +1188,9 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/[0.06] bg-background/60 backdrop-blur-md">
+        <div className="shrink-0 border-t border-white/[0.06] bg-background/80 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
           <div className="mx-auto max-w-4xl overflow-x-auto scrollbar-none">
-            <div className="flex items-center gap-1 px-3 py-2 min-w-max">
+            <div className="flex items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-1.5 sm:py-2 min-w-max">
               <button
                 onClick={() => { save(); onClose(); }}
                 className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded-lg hover:bg-white/[0.06] mr-1"
@@ -1235,40 +1221,6 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
                 document.body
               )}
 
-              {/* Page color picker */}
-              <div className="relative">
-                <button
-                  ref={colorBtnRef}
-                  type="button"
-                  onClick={() => setShowColorPicker((p) => !p)}
-                  title="Set page color / mood"
-                  className={cn(
-                    "shrink-0 flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg transition-colors",
-                    showColorPicker
-                      ? "bg-white/10 text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-white/[0.06]"
-                  )}
-                >
-                  <Palette className="h-4 w-4" />
-                  <span className="hidden xs:inline">Color</span>
-                  {pageColor && (
-                    <span
-                      className="h-3 w-3 rounded-full ring-1 ring-white/20 shrink-0 ml-0.5"
-                      style={{ background: NOTE_COLORS.find(c => c.value === pageColor)?.from ?? "transparent" }}
-                    />
-                  )}
-                </button>
-                {showColorPicker && createPortal(
-                  <PageColorPicker
-                    anchorEl={colorBtnRef.current!}
-                    currentColor={pageColor}
-                    onSelect={applyColor}
-                    onClose={() => setShowColorPicker(false)}
-                  />,
-                  document.body
-                )}
-              </div>
-
               <div className="shrink-0 w-px h-4 bg-white/[0.08] mx-1" />
 
               <button
@@ -1277,7 +1229,7 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
                 title="Archive"
               >
                 <ArchiveIcon className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline">Archive</span>
+                <span className="hidden sm:inline">Archive</span>
               </button>
               <button
                 onClick={() => setDeleteDialogOpen(true)}
@@ -1285,7 +1237,7 @@ function NoteEditor({ page, onClose, onChange, onArchive, onDelete }: {
                 title="Delete"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline">Delete</span>
+                <span className="hidden sm:inline">Delete</span>
               </button>
             </div>
           </div>
@@ -1365,89 +1317,6 @@ function ToolbarBtn({ icon, label, onClick, title, btnRef }: { icon: React.React
       {icon}
       <span className="hidden sm:inline">{label}</span>
     </button>
-  );
-}
-
-// ─── Page Color Picker ─────────────────────────────────────────────────────────
-
-function PageColorPicker({ anchorEl, currentColor, onSelect, onClose }: {
-  anchorEl: HTMLElement;
-  currentColor: string | null;
-  onSelect: (color: string | null) => void;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const rect = anchorEl.getBoundingClientRect();
-
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node) && !anchorEl.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [anchorEl, onClose]);
-
-  return (
-    <div
-      ref={ref}
-      style={{
-        position: "fixed",
-        bottom: `${window.innerHeight - rect.top + 8}px`,
-        left: `${rect.left}px`,
-        zIndex: 9999,
-      }}
-      className="animate-in fade-in slide-in-from-bottom-2 duration-150"
-    >
-      <div className="bg-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-3 w-[220px]">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-2.5 px-1">
-          Page Mood
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {NOTE_COLORS.map((c) => (
-            <button
-              key={c.value}
-              type="button"
-              onClick={() => onSelect(c.value)}
-              title={`${c.name} — ${c.meaning}`}
-              className={cn(
-                "group flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all hover:scale-105",
-                currentColor === c.value
-                  ? "ring-2 ring-white/40 scale-105"
-                  : "hover:bg-white/5"
-              )}
-            >
-              <div
-                className="h-8 w-8 rounded-full shadow-md ring-1 ring-black/10"
-                style={{ background: `linear-gradient(135deg, ${c.from}, ${c.to})` }}
-              />
-              <span className="text-[9px] text-muted-foreground font-medium leading-none">{c.name}</span>
-              <span className="text-[8px] text-muted-foreground/50 leading-none">{c.meaning}</span>
-            </button>
-          ))}
-          {/* Clear / no color */}
-          <button
-            type="button"
-            onClick={() => onSelect(null)}
-            title="Clear color"
-            className={cn(
-              "group flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all hover:scale-105",
-              currentColor === null
-                ? "ring-2 ring-white/40 scale-105"
-                : "hover:bg-white/5"
-            )}
-          >
-            <div className="h-8 w-8 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center">
-              <X className="h-3 w-3 text-muted-foreground/40" />
-            </div>
-            <span className="text-[9px] text-muted-foreground font-medium leading-none">None</span>
-            <span className="text-[8px] text-muted-foreground/50 leading-none">Clear</span>
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 

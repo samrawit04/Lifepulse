@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format,
-  isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths, subWeeks,
+  addDays, addMinutes, addMonths, addWeeks, differenceInMinutes, endOfMonth, endOfWeek, format,
+  isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek, subMonths, subWeeks,
 } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useCreateItem, useDeleteItem, useFolders, useItems, useUpdateItem } from "@/hooks/use-lifeos";
@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/calendar")({
   component: CalendarPage,
@@ -35,14 +36,14 @@ function CalendarPage() {
   const [editing, setEditing] = useState<Item | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const events = useMemo(() =>
-    items.filter((i) => !i.archived && ((i.type === "event" && i.event_date) || (i.type === "task" && i.due_date))),
-  [items]);
+  const now = useNow(30_000);
+
+  const events = useMemo(() => items.filter((i) => !i.archived && itemTiming(i) !== null), [items]);
 
   const eventsForDay = (d: Date) =>
     events.filter((e) => {
-      const dt = e.type === "event" ? e.event_date! : e.due_date!;
-      return isSameDay(new Date(dt), d);
+      const t = itemTiming(e);
+      return t !== null && isSameDay(t.start, d);
     });
 
   const folderColor = (id: string | null) => folders.find((f) => f.id === id)?.color ?? "#3B4A6B";
@@ -59,8 +60,8 @@ function CalendarPage() {
     return items
       .filter((i) => !i.archived && ((i.type === "event" && i.event_date && new Date(i.event_date) >= now) || (i.type === "task" && !i.completed && i.due_date && new Date(i.due_date) >= now)))
       .sort((a, b) => {
-        const dtA = new Date(a.type === "event" ? a.event_date! : a.due_date!).getTime();
-        const dtB = new Date(b.type === "event" ? b.event_date! : b.due_date!).getTime();
+        const dtA = itemTiming(a)?.start.getTime() ?? 0;
+        const dtB = itemTiming(b)?.start.getTime() ?? 0;
         return dtA - dtB;
       });
   }, [items]);
@@ -96,7 +97,26 @@ function CalendarPage() {
             </Button>
           </div>
 
-          <Button onClick={() => openNew(cursor)} className="bg-lagoon text-cream hover:bg-lagoon/90 text-xs gap-1.5 h-9 rounded-xl">
+          <Button
+            variant="outline"
+            onClick={() => setCursor(new Date())}
+            className="h-9 rounded-xl border-white/10 bg-white/[0.03] text-xs"
+          >
+            Today
+          </Button>
+
+          <span
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-xs font-semibold text-red-500 tabular-nums"
+            title="Current time"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+            </span>
+            Now · {format(now, "p")}
+          </span>
+
+          <Button onClick={() => openNew(roundToNextSlot(view === "month" ? cursor : new Date()))} className="bg-lagoon text-cream hover:bg-lagoon/90 text-xs gap-1.5 h-9 rounded-xl">
             <Plus className="h-4 w-4" /> New Event
           </Button>
         </div>
@@ -106,10 +126,24 @@ function CalendarPage() {
         <MonthGrid cursor={cursor} eventsForDay={eventsForDay} folderColor={folderColor} onDayClick={openNew} onEventClick={setEditing} />
       )}
       {view === "week" && (
-        <WeekList cursor={cursor} eventsForDay={eventsForDay} folderColor={folderColor} onDayClick={openNew} onEventClick={setEditing} />
+        <TimeGrid
+          days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(cursor), i))}
+          now={now}
+          eventsForDay={eventsForDay}
+          folderColor={folderColor}
+          onSlotClick={openNew}
+          onEventClick={setEditing}
+        />
       )}
       {view === "day" && (
-        <DayList day={cursor} eventsForDay={eventsForDay} folderColor={folderColor} onEventClick={setEditing} onAdd={() => openNew(cursor)} />
+        <TimeGrid
+          days={[startOfDay(cursor)]}
+          now={now}
+          eventsForDay={eventsForDay}
+          folderColor={folderColor}
+          onSlotClick={openNew}
+          onEventClick={setEditing}
+        />
       )}
 
       {/* ── Upcoming Events List Feature ── */}
@@ -138,7 +172,8 @@ function CalendarPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {upcomingEvents.map((ev) => {
-              const dt = new Date(ev.type === "event" ? ev.event_date! : ev.due_date!);
+              const timing = itemTiming(ev)!;
+              const dt = timing.start;
               const color = folderColor(ev.folder_id);
               return (
                 <div
@@ -155,7 +190,9 @@ function CalendarPage() {
                       {ev.title || "Untitled"}
                     </p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {format(dt, "EEE, MMM d · p")}
+                      {timing.allDay
+                        ? format(dt, "EEE, MMM d")
+                        : `${format(dt, "EEE, MMM d · p")}${timing.hasEnd ? ` – ${format(timing.end, "p")}` : ""}`}
                     </p>
                     {ev.content && (
                       <p className="text-[10px] text-muted-foreground/75 truncate mt-1">
@@ -275,57 +312,289 @@ function MonthGrid({
   );
 }
 
-function WeekList({ cursor, eventsForDay, folderColor, onDayClick, onEventClick }: any) {
-  const start = startOfWeek(cursor);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  return (
-    <div className="grid gap-3 sm:grid-cols-7">
-      {days.map((d) => (
-        <div key={d.toISOString()} className="min-h-[220px] rounded-2xl border bg-card p-3 shadow-soft">
-          <button onClick={() => onDayClick(d)} className="w-full text-left">
-            <p className="text-xs uppercase tracking-wider text-clay">{format(d, "EEE")}</p>
-            <p className={cn("font-display text-xl", isSameDay(d, new Date()) ? "text-lagoon" : "text-lagoon/70")}>{format(d, "d")}</p>
-          </button>
-          <div className="mt-3 space-y-1.5">
-            {eventsForDay(d).map((e: Item) => (
-              <button key={e.id} onClick={() => onEventClick(e)} className="block w-full rounded-md px-2 py-1 text-left text-xs font-medium text-lagoon" style={{ background: (e.color ?? folderColor(e.folder_id)) + "33" }}>
-                {e.title || "Untitled"}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+// ─── Time helpers ────────────────────────────────────────────────────────────
+
+const HOUR_HEIGHT = 48; // px per hour in the time grid
+const DEFAULT_EVENT_MINUTES = 60;
+const DEFAULT_TASK_MINUTES = 30;
+
+type Timing = { start: Date; end: Date; allDay: boolean; hasEnd: boolean };
+
+/** Where an item sits on the calendar (null = not scheduled). */
+function itemTiming(i: Item): Timing | null {
+  if (i.type === "event" && i.event_date) {
+    const start = new Date(i.event_date);
+    const end = i.end_at ? new Date(i.end_at) : addMinutes(start, DEFAULT_EVENT_MINUTES);
+    return { start, end, allDay: false, hasEnd: Boolean(i.end_at) };
+  }
+  if (i.type === "task") {
+    if (i.start_at) {
+      const start = new Date(i.start_at);
+      const end = i.end_at ? new Date(i.end_at) : addMinutes(start, DEFAULT_TASK_MINUTES);
+      return { start, end, allDay: false, hasEnd: Boolean(i.end_at) };
+    }
+    if (i.due_date) {
+      const start = new Date(i.due_date);
+      return { start, end: start, allDay: true, hasEnd: false };
+    }
+  }
+  return null;
 }
 
-function DayList({ day, eventsForDay, folderColor, onEventClick, onAdd }: any) {
-  const evs = eventsForDay(day);
+/** Live clock that re-renders every `intervalMs`. */
+function useNow(intervalMs: number) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+/** Next 30-minute slot after `base` (keeps the date of `base`). */
+function roundToNextSlot(base: Date) {
+  const now = new Date();
+  const d = new Date(base);
+  if (isSameDay(base, now)) {
+    d.setHours(now.getHours(), now.getMinutes() < 30 ? 30 : 60, 0, 0);
+  } else {
+    d.setHours(9, 0, 0, 0);
+  }
+  return d;
+}
+
+/** Assign overlapping timed items to side-by-side lanes. */
+function layoutDay(items: Item[]) {
+  const timed = items
+    .map((item) => ({ item, t: itemTiming(item)! }))
+    .filter((x) => x.t && !x.t.allDay)
+    .sort((a, b) => a.t.start.getTime() - b.t.start.getTime());
+
+  const placed: { item: Item; t: Timing; lane: number; lanes: number }[] = [];
+  let cluster: typeof placed = [];
+  let clusterEnd = 0;
+  const laneEnds: number[] = [];
+
+  const flush = () => {
+    const lanes = Math.max(1, ...cluster.map((c) => c.lane + 1));
+    cluster.forEach((c) => (c.lanes = lanes));
+    placed.push(...cluster);
+    cluster = [];
+    laneEnds.length = 0;
+  };
+
+  for (const x of timed) {
+    const s = x.t.start.getTime();
+    const e = Math.max(x.t.end.getTime(), s + 15 * 60_000);
+    if (cluster.length && s >= clusterEnd) flush();
+    let lane = laneEnds.findIndex((end) => end <= s);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = e;
+    cluster.push({ ...x, lane, lanes: 1 });
+    clusterEnd = Math.max(clusterEnd, e);
+  }
+  if (cluster.length) flush();
+  return placed;
+}
+
+// ─── Time grid (Week / Day) with a live "now" indicator ─────────────────────
+
+function TimeGrid({
+  days, now, eventsForDay, folderColor, onSlotClick, onEventClick,
+}: {
+  days: Date[];
+  now: Date;
+  eventsForDay: (d: Date) => Item[];
+  folderColor: (id: string | null) => string;
+  onSlotClick: (d: Date) => void;
+  onEventClick: (i: Item) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const hours = Array.from({ length: 24 }, (_, h) => h);
+  const showsToday = days.some((d) => isSameDay(d, now));
+  const nowTop = (now.getHours() * 60 + now.getMinutes()) * (HOUR_HEIGHT / 60);
+  const isWeek = days.length > 1;
+
+  // Scroll so "now" (or 8 AM) is in view when the grid opens or the range changes
+  const rangeKey = days[0]?.toDateString();
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const target = showsToday ? nowTop - el.clientHeight / 3 : 8 * HOUR_HEIGHT;
+    el.scrollTop = Math.max(0, target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeKey]);
+
+  const gridCols = { gridTemplateColumns: `56px repeat(${days.length}, minmax(0, 1fr))` };
+
   return (
-    <div className="rounded-2xl border bg-card p-6 shadow-soft">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-2xl text-lagoon">{format(day, "EEEE")}</h2>
-        <Button onClick={onAdd} size="sm" variant="outline"><Plus className="h-4 w-4" /> Add</Button>
-      </div>
-      {evs.length === 0 ? (
-        <p className="mt-6 rounded-xl bg-muted/50 py-8 text-center text-sm text-muted-foreground">No events on this day.</p>
-      ) : (
-        <ul className="mt-4 space-y-2">
-          {evs.map((e: Item) => (
-            <li key={e.id} onClick={() => onEventClick(e)} className="cursor-pointer rounded-xl border bg-background p-3 hover:bg-accent/20">
-              <div className="flex items-center gap-3">
-                <div className="h-2.5 w-2.5 rounded-full" style={{ background: e.color ?? folderColor(e.folder_id) }} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-lagoon">{e.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(e.type === "event" ? e.event_date! : e.due_date!), "p")}
-                  </p>
-                </div>
+    <div className="overflow-hidden rounded-2xl border bg-card shadow-soft">
+      <div className="overflow-x-auto">
+        <div className={cn(isWeek && "min-w-[720px]")}>
+          {/* Day headers */}
+          <div className="grid border-b bg-muted/40" style={gridCols}>
+            <div className="flex items-end justify-center pb-1 text-[9px] font-medium text-muted-foreground">
+              {format(now, "O")}
+            </div>
+            {days.map((d) => {
+              const today = isSameDay(d, now);
+              return (
+                <button
+                  key={d.toISOString()}
+                  onClick={() => onSlotClick(roundToNextSlot(d))}
+                  className="flex flex-col items-center gap-0.5 border-l py-2 transition hover:bg-accent/20"
+                >
+                  <span className={cn("text-[10px] font-semibold uppercase tracking-wider", today ? "text-red-500" : "text-clay")}>
+                    {format(d, isWeek ? "EEE" : "EEEE")}
+                  </span>
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full font-display text-base",
+                      today ? "bg-red-500 text-white" : "text-lagoon/80"
+                    )}
+                  >
+                    {format(d, "d")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* All-day row (tasks with a date but no time) */}
+          {days.some((d) => eventsForDay(d).some((e) => itemTiming(e)?.allDay)) && (
+            <div className="grid border-b bg-muted/20" style={gridCols}>
+              <div className="flex items-center justify-end pr-2 text-[9px] font-medium uppercase text-muted-foreground">
+                All day
               </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              {days.map((d) => (
+                <div key={d.toISOString()} className="min-w-0 space-y-1 border-l p-1">
+                  {eventsForDay(d)
+                    .filter((e) => itemTiming(e)?.allDay)
+                    .map((e) => (
+                      <button
+                        key={e.id}
+                        onClick={() => onEventClick(e)}
+                        className={cn(
+                          "block w-full truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium text-lagoon",
+                          e.completed && "line-through opacity-60"
+                        )}
+                        style={{ background: (e.color ?? folderColor(e.folder_id)) + "33" }}
+                      >
+                        {e.type === "task" ? "☑ " : ""}{e.title || "Untitled"}
+                      </button>
+                    ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Scrollable hours */}
+          <div ref={scrollRef} className="relative max-h-[65vh] overflow-y-auto">
+            <div className="relative grid" style={{ ...gridCols, height: 24 * HOUR_HEIGHT }}>
+              {/* Hour gutter */}
+              <div className="relative">
+                {hours.map((h) => (
+                  <div
+                    key={h}
+                    className="absolute right-2 -translate-y-1/2 text-[10px] text-muted-foreground tabular-nums"
+                    style={{ top: h * HOUR_HEIGHT }}
+                  >
+                    {h === 0 ? "" : format(new Date(2000, 0, 1, h), "h a")}
+                  </div>
+                ))}
+                {showsToday && (
+                  <div
+                    className="absolute right-1 z-20 -translate-y-1/2 rounded-md bg-red-500 px-1 py-0.5 text-[9px] font-bold text-white tabular-nums shadow"
+                    style={{ top: nowTop }}
+                  >
+                    {format(now, "HH:mm")}
+                  </div>
+                )}
+              </div>
+
+              {/* Day columns */}
+              {days.map((d) => {
+                const today = isSameDay(d, now);
+                const placed = layoutDay(eventsForDay(d));
+                return (
+                  <div
+                    key={d.toISOString()}
+                    className={cn("relative border-l", today && "bg-red-500/[0.03]")}
+                    onClick={(ev) => {
+                      const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      const minutes = Math.floor(((ev.clientY - rect.top) / HOUR_HEIGHT) * 2) * 30;
+                      const slot = startOfDay(d);
+                      slot.setMinutes(Math.min(Math.max(minutes, 0), 23 * 60 + 30));
+                      onSlotClick(slot);
+                    }}
+                  >
+                    {/* hour + half-hour lines */}
+                    {hours.map((h) => (
+                      <div key={h} className="pointer-events-none absolute inset-x-0" style={{ top: h * HOUR_HEIGHT }}>
+                        <div className="border-t border-border/60" />
+                        <div className="border-t border-dashed border-border/25" style={{ marginTop: HOUR_HEIGHT / 2 - 1 }} />
+                      </div>
+                    ))}
+
+                    {/* events */}
+                    {placed.map(({ item, t, lane, lanes }) => {
+                      const dayStart = startOfDay(d);
+                      const startMin = Math.max(0, differenceInMinutes(t.start, dayStart));
+                      const endMin = Math.min(24 * 60, Math.max(startMin + 20, differenceInMinutes(t.end, dayStart)));
+                      const color = item.color ?? folderColor(item.folder_id);
+                      const past = t.end < now;
+                      const live = t.start <= now && now < t.end;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={(ev) => { ev.stopPropagation(); onEventClick(item); }}
+                          className={cn(
+                            "absolute z-10 overflow-hidden rounded-md border-l-[3px] px-1.5 py-0.5 text-left shadow-sm transition hover:z-20 hover:shadow-md",
+                            past && "opacity-60",
+                            live && "ring-1 ring-red-500/60",
+                            item.completed && "line-through"
+                          )}
+                          style={{
+                            top: startMin * (HOUR_HEIGHT / 60),
+                            height: (endMin - startMin) * (HOUR_HEIGHT / 60) - 2,
+                            left: `calc(${(lane / lanes) * 100}% + 2px)`,
+                            width: `calc(${100 / lanes}% - 4px)`,
+                            background: color + "2e",
+                            borderLeftColor: color,
+                          }}
+                          title={`${item.title || "Untitled"} · ${format(t.start, "p")} – ${format(t.end, "p")}`}
+                        >
+                          <p className="truncate text-[11px] font-semibold leading-tight text-lagoon">
+                            {item.type === "task" ? "☑ " : ""}{item.title || "Untitled"}
+                          </p>
+                          {endMin - startMin >= 40 && (
+                            <p className="truncate text-[10px] text-muted-foreground">
+                              {format(t.start, "p")} – {format(t.end, "p")}
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {/* Current time line */}
+                    {today && (
+                      <div className="pointer-events-none absolute inset-x-0 z-30" style={{ top: nowTop }}>
+                        <div className="relative h-[2px] bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]">
+                          <span className="absolute -left-[5px] -top-[4px] h-[10px] w-[10px] rounded-full bg-red-500" />
+                        </div>
+                      </div>
+                    )}
+                    {/* Faint line across other days (like Teams) */}
+                    {!today && showsToday && (
+                      <div className="pointer-events-none absolute inset-x-0 z-0 border-t border-red-500/30" style={{ top: nowTop }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -340,7 +609,8 @@ function EventDialog({
   const initialDate = existing?.event_date ?? existing?.due_date ?? date?.toISOString() ?? new Date().toISOString();
   const [title, setTitle] = useState(existing?.title ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
-  const [when, setWhen] = useState(toLocal(initialDate));
+  const [when, setWhen] = useState(toLocal(existing?.start_at ?? initialDate));
+  const [until, setUntil] = useState(existing?.end_at ? toLocal(existing.end_at) : "");
   const [folderId, setFolderId] = useState<string>(existing?.folder_id ?? "none");
   const [color, setColor] = useState(existing?.color ?? "#E48CA5");
 
@@ -348,19 +618,45 @@ function EventDialog({
   useMemo(() => {
     setTitle(existing?.title ?? "");
     setContent(existing?.content ?? "");
-    setWhen(toLocal(existing?.event_date ?? existing?.due_date ?? date?.toISOString() ?? new Date().toISOString()));
+    const startIso = existing?.start_at ?? existing?.event_date ?? existing?.due_date ?? date?.toISOString() ?? new Date().toISOString();
+    setWhen(toLocal(startIso));
+    setUntil(
+      existing?.end_at
+        ? toLocal(existing.end_at)
+        : existing
+          ? ""
+          : toLocal(addMinutes(new Date(startIso), DEFAULT_EVENT_MINUTES).toISOString())
+    );
     setFolderId(existing?.folder_id ?? "none");
     setColor(existing?.color ?? "#E48CA5");
   }, [existing?.id, date?.toISOString()]);
 
   const save = () => {
-    const iso = new Date(when).toISOString();
+    const startDate = new Date(when);
+    if (Number.isNaN(startDate.getTime())) return;
+    const iso = startDate.toISOString();
+    const endDate = until ? new Date(until) : null;
+    if (endDate && endDate <= startDate) {
+      toast.error("End time must be after the start time.");
+      return;
+    }
+    const endIso = endDate ? endDate.toISOString() : null;
+
     if (existing) {
-      const patch: any = { title, content, color, folder_id: folderId === "none" ? null : folderId };
-      if (existing.type === "event") patch.event_date = iso; else patch.due_date = iso;
+      const patch: any = { title, content, color, folder_id: folderId === "none" ? null : folderId, end_at: endIso };
+      if (existing.type === "event") {
+        patch.event_date = iso;
+      } else {
+        patch.due_date = iso;
+        // Keep task time windows in sync when it was scheduled with a time
+        if (existing.start_at || endIso) patch.start_at = iso;
+      }
       onUpdate(existing.id, patch);
     } else {
-      onCreate({ type: "event", title, content, color, event_date: iso, folder_id: folderId === "none" ? null : folderId });
+      onCreate({
+        type: "event", title, content, color, event_date: iso, end_at: endIso,
+        folder_id: folderId === "none" ? null : folderId,
+      });
     }
     onClose();
   };
@@ -373,7 +669,16 @@ function EventDialog({
         </DialogHeader>
         <div className="space-y-3">
           <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label className="space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground">Starts</span>
+              <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground">Ends (optional)</span>
+              <Input type="datetime-local" value={until} min={when} onChange={(e) => setUntil(e.target.value)} />
+            </label>
+          </div>
           <Textarea placeholder="Notes…" value={content ?? ""} onChange={(e) => setContent(e.target.value)} />
           <div className="flex gap-2">
             <Select value={folderId} onValueChange={setFolderId}>

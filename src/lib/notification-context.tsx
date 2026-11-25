@@ -227,13 +227,10 @@ export function useNotificationPoller({
 
     if (overdueTasks.length > 0) {
       const todayStr = now.toDateString();
-      const localKey = "lifepulse_last_overdue_notif_date";
-      const lastFired = typeof window !== "undefined" ? localStorage.getItem(localKey) : null;
       const key = `tasks-overdue-${todayStr}`;
 
-      if (!firedRef.current.has(key) && lastFired !== todayStr) {
+      if (!firedRef.current.has(key)) {
         firedRef.current.add(key);
-        if (typeof window !== "undefined") localStorage.setItem(localKey, todayStr);
 
         const alreadyNotified = notifications.some(
           (n) => n.category === "task" && n.title.includes("overdue") && isDateToday(n.createdAt)
@@ -261,13 +258,10 @@ export function useNotificationPoller({
 
     if (dueTodayTasks.length > 0) {
       const todayStr = now.toDateString();
-      const localKey = "lifepulse_last_due_today_notif_date";
-      const lastFired = typeof window !== "undefined" ? localStorage.getItem(localKey) : null;
       const key = `tasks-due-today-${todayStr}`;
 
-      if (!firedRef.current.has(key) && lastFired !== todayStr) {
+      if (!firedRef.current.has(key)) {
         firedRef.current.add(key);
-        if (typeof window !== "undefined") localStorage.setItem(localKey, todayStr);
 
         const alreadyNotified = notifications.some(
           (n) => n.category === "task" && n.title.includes("due today") && isDateToday(n.createdAt)

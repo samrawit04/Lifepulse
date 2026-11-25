@@ -24,8 +24,10 @@ import { useSidebarPreferences, ALL_SIDEBAR_ITEMS } from "@/hooks/use-sidebar-pr
 import { SettingsDialog } from "@/components/settings-dialog";
 import { SidebarUserProfile } from "@/components/sidebar-user-profile";
 
-const STORAGE_KEY = "lifepulse.sidebar.open";
-const THEME_STORAGE_KEY = "lifepulse.theme";
+function applyThemeClass(theme: "dark" | "light") {
+  if (theme === "light") document.documentElement.classList.add("light");
+  else document.documentElement.classList.remove("light");
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<boolean>(true);
@@ -44,30 +46,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     return found?.label ?? "LifePulse";
   })();
 
-  // Sync theme from backend when profile loads
+  // Theme comes from the user's profile on the server
   useEffect(() => {
-    if (userProfile?.theme) {
-      const savedTheme = userProfile.theme as "dark" | "light";
-      setTheme(savedTheme);
-      localStorage.setItem(THEME_STORAGE_KEY, savedTheme);
-      if (savedTheme === "light") {
-        document.documentElement.classList.add("light");
-      } else {
-        document.documentElement.classList.remove("light");
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile?.theme]);
-
-  useEffect(() => {
-    const savedTheme = (localStorage.getItem(THEME_STORAGE_KEY) as "dark" | "light") || "dark";
+    const savedTheme = (userProfile?.theme === "light" ? "light" : "dark") as "dark" | "light";
     setTheme(savedTheme);
-    if (savedTheme === "light") {
-      document.documentElement.classList.add("light");
-    } else {
-      document.documentElement.classList.remove("light");
-    }
-  }, []);
+    applyThemeClass(savedTheme);
+  }, [userProfile?.theme]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -76,12 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const setThemeMode = (next: "dark" | "light") => {
     setTheme(next);
-    localStorage.setItem(THEME_STORAGE_KEY, next);
-    if (next === "light") {
-      document.documentElement.classList.add("light");
-    } else {
-      document.documentElement.classList.remove("light");
-    }
+    applyThemeClass(next);
     // Persist theme to backend
     updateProfile.mutate({ theme: next });
   };
@@ -93,15 +72,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Sidebar starts open on desktop, closed on mobile
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved !== null) setOpen(saved === "1");
-    else setOpen(window.innerWidth >= 1024);
+    setOpen(window.innerWidth >= 1024);
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, open ? "1" : "0");
-  }, [open]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 1024) setOpen(false);

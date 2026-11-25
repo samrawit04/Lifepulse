@@ -22,4 +22,5 @@ public class User
     public ICollection<Notification> Notifications { get; set; } = [];
     public ICollection<PlannedPurchase> PlannedPurchases { get; set; } = [];
     public ICollection<CategoryBudget> CategoryBudgets { get; set; } = [];
+    public ICollection<UserSetting> Settings { get; set; } = [];
 }

@@ -1,28 +1,26 @@
 /**
  * NotificationPoller — mounted inside the authenticated app shell.
- * Reads live items + expenses data and feeds them to the notification engine.
- * Budget state is read from localStorage (same source as expenses.tsx).
+ * Reads live items, expenses and category budgets (all from the API) and feeds
+ * them to the notification engine.
  */
 import { useMemo } from "react";
 import { useItems } from "@/hooks/use-lifeos";
-import { useExpenses } from "@/hooks/use-expenses";
+import { useCategoryBudgets, useExpenses } from "@/hooks/use-expenses";
 import { useNotificationPoller } from "@/lib/notification-context";
 
-function getBudgets(): Record<string, number> {
-  if (typeof window === "undefined") return { Food: 4000, Transport: 3000, Shopping: 1000 };
-  try {
-    const saved = localStorage.getItem("lifepulse.expenses.category_budgets");
-    return saved ? JSON.parse(saved) : { Food: 4000, Transport: 3000, Shopping: 1000 };
-  } catch {
-    return { Food: 4000, Transport: 3000, Shopping: 1000 };
-  }
-}
+const NO_BUDGETS: Record<string, number> = {};
 
 export function NotificationPoller() {
   const { data: items = [] } = useItems();
   const { data: expenses = [] } = useExpenses();
+  const { data: budgetData } = useCategoryBudgets();
 
-  const categoryBudgets = useMemo(getBudgets, []);
+  const categoryBudgets = useMemo(() => {
+    const raw = budgetData ?? NO_BUDGETS;
+    // API returns decimals; normalise to numbers
+    return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Number(v)]));
+  }, [budgetData]);
+
   const monthlyBudget = useMemo(
     () => Object.values(categoryBudgets).reduce((s, v) => s + v, 0),
     [categoryBudgets]

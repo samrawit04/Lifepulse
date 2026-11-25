@@ -24,6 +24,10 @@ public class Item
     public string? Priority { get; set; }    // "low" | "medium" | "high"
     public bool Completed { get; set; } = false;
 
+    // Scheduled time window (tasks & events)
+    public DateTime? StartAt { get; set; }
+    public DateTime? EndAt { get; set; }
+
     // Sticky notes (canvas position/size)
     public double? PosX { get; set; }
     public double? PosY { get; set; }
