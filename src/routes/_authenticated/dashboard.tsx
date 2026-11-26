@@ -13,6 +13,7 @@ import { useItems } from "@/hooks/use-lifeos";
 import { deriveDefaultName, useUserProfile } from "@/hooks/use-user-profile";
 import { noteColorCss } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
+import { notebookPlainText } from "@/lib/notebook-content";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -320,74 +321,7 @@ function prioClass(p: string | null) {
 }
 
 function extractSnippet(content: string | null): string {
-  if (!content) return "";
-  const trimmed = content.trim();
-  if (!trimmed) return "";
-
-  const cleanText = (str: string) =>
-    str
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-  try {
-    const parsed = JSON.parse(trimmed);
-
-    // Format 1: { version: 2, blocks: [...] } or { blocks: [...] }
-    if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).blocks)) {
-      const textParts: string[] = [];
-      for (const b of (parsed as any).blocks) {
-        if (b && b.kind === "text" && typeof b.content === "string") {
-          const cleaned = cleanText(b.content);
-          if (cleaned) textParts.push(cleaned);
-        } else if (b && b.kind === "table" && Array.isArray(b.rows)) {
-          for (const row of b.rows) {
-            if (Array.isArray(row)) {
-              for (const cell of row) {
-                if (typeof cell === "string" && cell.trim()) {
-                  const cleaned = cleanText(cell);
-                  if (cleaned) textParts.push(cleaned);
-                }
-              }
-            }
-          }
-        }
-      }
-      return textParts.join(" ").trim();
-    }
-
-    // Format 2: Direct array of blocks [ { kind: "text", content: ... } ]
-    if (Array.isArray(parsed)) {
-      const textParts: string[] = [];
-      for (const b of parsed) {
-        if (b && typeof b === "object") {
-          if (typeof b.content === "string") {
-            const cleaned = cleanText(b.content);
-            if (cleaned) textParts.push(cleaned);
-          } else if (typeof b.text === "string") {
-            const cleaned = cleanText(b.text);
-            if (cleaned) textParts.push(cleaned);
-          }
-        }
-      }
-      return textParts.join(" ").trim();
-    }
-
-    // Format 3: Legacy { text: "...", attachments: [...] }
-    if (parsed && typeof parsed === "object" && typeof (parsed as any).text === "string") {
-      return cleanText((parsed as any).text);
-    }
-
-    // Unrecognized JSON structure — do NOT show raw JSON
-    return "";
-  } catch {
-    // If it looks like JSON that failed parsing, don't show raw JSON
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      return "";
-    }
-    return cleanText(trimmed);
-  }
+  return notebookPlainText(content);
 }
 
 function Panel({

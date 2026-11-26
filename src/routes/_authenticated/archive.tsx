@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { itemText } from "@/lib/notebook-content";
 
 export const Route = createFileRoute("/_authenticated/archive")({
   component: Archive,
@@ -64,7 +65,7 @@ function Archive() {
             <li key={i.id} className="flex items-start gap-3 rounded-xl border bg-card p-3 shadow-soft">
               <div className="min-w-0 flex-1">
                 <p className="text-xs uppercase tracking-wider text-clay">{typeLabel(i.type)}</p>
-                <p className="mt-0.5 truncate font-medium text-lagoon">{i.title || (i.content ?? "").slice(0, 80) || "Untitled"}</p>
+                <p className="mt-0.5 truncate font-medium text-lagoon">{i.title || itemText(i).slice(0, 80) || "Untitled"}</p>
                 <p className="text-xs text-muted-foreground">Archived · updated {format(new Date(i.updated_at), "MMM d, yyyy")}</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => update.mutate({ id: i.id, patch: { archived: false } })}>
@@ -102,5 +103,5 @@ function typeLabel(t: Item["type"]) {
 function matches(i: Item, q: string) {
   if (!q) return true;
   const needle = q.toLowerCase();
-  return [(i.title ?? ""), (i.content ?? ""), ...(i.tags ?? [])].join(" ").toLowerCase().includes(needle);
+  return [(i.title ?? ""), itemText(i), ...(i.tags ?? [])].join(" ").toLowerCase().includes(needle);
 }

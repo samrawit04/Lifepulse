@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Bell, Check, Trash2, X } from "lucide-react";
+import { Bell } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -10,18 +10,11 @@ import {
 } from "@/lib/notification-context";
 import { formatDistanceToNow } from "date-fns";
 
-const CATEGORY_COLORS: Record<NotifCategory, string> = {
-  calendar: "bg-blue-500/20 text-blue-400 border-blue-400/20",
-  task: "bg-amber-500/20 text-amber-400 border-amber-400/20",
-  expense: "bg-rose-500/20 text-rose-400 border-rose-400/20",
-  general: "bg-primary/20 text-primary border-primary/20",
-};
-
-const CATEGORY_DOT: Record<NotifCategory, string> = {
-  calendar: "bg-blue-400",
-  task: "bg-amber-400",
-  expense: "bg-rose-400",
-  general: "bg-primary",
+const CATEGORY_LABEL: Record<NotifCategory, string> = {
+  calendar: "Calendar",
+  task: "Task",
+  expense: "Expense",
+  general: "General",
 };
 
 function NotifItem({
@@ -35,43 +28,41 @@ function NotifItem({
   onDismiss: () => void;
   onNavigate: () => void;
 }) {
-  const catKey = (n.category as NotifCategory) in CATEGORY_DOT ? (n.category as NotifCategory) : "general";
+  const catKey = (n.category as NotifCategory) in CATEGORY_LABEL ? (n.category as NotifCategory) : "general";
 
   return (
     <div
       className={cn(
-        "group relative flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 transition-all rounded-xl cursor-pointer border border-transparent",
+        "group relative rounded-xl border px-4 py-3 transition-colors cursor-pointer",
         !n.isRead
-          ? "bg-white/[0.04] border-white/5 shadow-sm"
-          : "hover:bg-white/[0.03]"
+          ? "border-border bg-card"
+          : "border-transparent hover:bg-muted/40"
       )}
       onClick={() => {
         onRead();
         if (n.link) onNavigate();
       }}
     >
-      {/* Icon badge */}
-      <div className="shrink-0 h-8 w-8 sm:h-9 sm:w-9 grid place-items-center rounded-xl bg-white/[0.05] border border-white/10 text-base sm:text-lg select-none">
-        {n.icon ?? "🔔"}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-1.5">
-          <p className={cn("text-xs sm:text-sm font-semibold leading-snug break-words", n.isRead ? "text-foreground/75" : "text-foreground font-bold")}>
+      <div className="min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <p className={cn("text-sm leading-snug break-words", n.isRead ? "font-medium text-foreground/70" : "font-bold text-foreground")}>
             {n.title}
           </p>
           <button
             onClick={(e) => { e.stopPropagation(); onDismiss(); }}
-            className="shrink-0 h-5 w-5 grid place-items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-white/10 transition opacity-80 sm:opacity-0 sm:group-hover:opacity-100 -mr-0.5 -mt-0.5"
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
             title="Dismiss"
           >
-            <X className="h-3 w-3" />
+            Dismiss
           </button>
         </div>
-        <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed mt-0.5 break-words line-clamp-2">{n.body}</p>
-        <div className="flex items-center gap-1.5 mt-1.5">
-          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", CATEGORY_DOT[catKey])} />
-          <span className="text-[10px] text-muted-foreground/60 font-medium">
+        {n.body && (
+          <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed break-words line-clamp-2">{n.body}</p>
+        )}
+        <div className="mt-1.5 text-[11px] text-muted-foreground/70">
+          <span className="font-medium">{CATEGORY_LABEL[catKey]}</span>
+          <span className="mx-1.5">·</span>
+          <span>
             {(() => {
               try {
                 const d = new Date(n.createdAt);
@@ -184,13 +175,12 @@ export function NotificationBell() {
             maxHeight: `calc(100vh - ${coords.top + 16}px)`,
             zIndex: 9999
           }}
-          className="w-[calc(100vw-24px)] sm:w-96 max-w-sm rounded-2xl border border-white/10 bg-sidebar/95 shadow-2xl backdrop-blur-2xl overflow-hidden animate-in slide-in-from-top-2 duration-150 flex flex-col"
+          className="w-[calc(100vw-24px)] sm:w-96 max-w-sm rounded-2xl border border-border bg-card text-card-foreground shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 flex flex-col"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/5 px-4 py-3 shrink-0">
+          <div className="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
             <div className="flex items-center gap-2">
-              <Bell className="h-4 w-4 text-primary" />
-              <span className="font-display text-sm font-semibold text-foreground">Notifications</span>
+              <span className="font-display text-base font-bold text-foreground">Notifications</span>
               {unreadCount > 0 && (
                 <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
                   {unreadCount} new
@@ -201,31 +191,28 @@ export function NotificationBell() {
               {unreadCount > 0 && (
                 <button
                   onClick={markAllRead}
-                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-white/10 hover:text-foreground transition"
+                  className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition"
                   title="Mark all as read"
                 >
-                  <Check className="h-3 w-3" /> All read
+                  Mark all read
                 </button>
               )}
               {!isEmpty && (
                 <button
                   onClick={clearAll}
-                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-rose-500/10 hover:text-rose-400 transition"
+                  className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition"
                   title="Clear all"
                 >
-                  <Trash2 className="h-3 w-3" /> Clear
+                  Clear
                 </button>
               )}
             </div>
           </div>
 
           {/* Body */}
-          <div className="overflow-y-auto p-1.5 flex-1 min-h-0">
+          <div className="overflow-y-auto p-2 flex-1 min-h-0">
             {isEmpty ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-2xl">
-                  🎉
-                </div>
                 <p className="text-sm font-semibold text-foreground">You're all caught up!</p>
                 <p className="mt-1 text-xs text-muted-foreground">No notifications right now.</p>
               </div>
@@ -247,17 +234,6 @@ export function NotificationBell() {
             )}
           </div>
 
-          {/* Category legend */}
-          {!isEmpty && (
-            <div className="flex items-center gap-3 border-t border-white/5 px-4 py-2.5 shrink-0 bg-white/[0.01]">
-              {(["calendar", "task", "expense"] as NotifCategory[]).map((cat) => (
-                <div key={cat} className="flex items-center gap-1.5">
-                  <span className={cn("h-2 w-2 rounded-full", CATEGORY_DOT[cat])} />
-                  <span className="text-[10px] capitalize text-muted-foreground">{cat}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>,
         document.body
       )}

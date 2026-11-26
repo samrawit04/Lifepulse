@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { NewPageDialog } from "@/components/new-page-dialog";
 import { usePinnedFolders } from "@/hooks/use-pinned-folders";
+import { emptyPageContent } from "@/lib/notebook-content";
 
 interface SidebarNotebookTreeProps {
   currentPath: string;
@@ -135,7 +136,7 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
       {
         type: "notebook_page",
         title,
-        content: JSON.stringify({ version: 2, blocks: [{ id: `b-${Date.now()}`, kind: "text", content: "" }] }),
+        content: emptyPageContent(),
         folder_id: folderId,
       },
       {

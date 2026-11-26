@@ -4,6 +4,8 @@ export interface Item {
   type: "sticky" | "notebook_page" | "task" | "event";
   title: string | null;
   content: string | null;
+  /** Parent task id when this task is a sub-task inside a task folder. */
+  parent_id: string | null;
   folder_id: string | null;
   color: string | null;
   tags: string[];

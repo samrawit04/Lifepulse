@@ -51,6 +51,7 @@ export function useCreateItem() {
         title: input.title ?? null,
         content: input.content ?? null,
         type: input.type,
+        parent_id: input.parent_id ?? null,
         folder_id: input.folder_id ?? null,
         color: input.color ?? null,
         tags: input.tags ?? [],
@@ -104,6 +105,9 @@ export function useUpdateItem() {
       if (patch.event_date === null) {
         apiPatch.clear_event_date = true;
         apiPatch.clearEventDate = true;
+      }
+      if (patch.parent_id === null) {
+        apiPatch.clear_parent_id = true;
       }
       if (patch.start_at === null) {
         apiPatch.clear_start_at = true;

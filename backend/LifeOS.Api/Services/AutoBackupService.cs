@@ -4,12 +4,31 @@ using System.Text.Json;
 
 namespace LifeOS.Api.Services;
 
-public class AutoBackupService(IServiceProvider serviceProvider, ILogger<AutoBackupService> logger) : BackgroundService
+/// <summary>
+/// Writes a JSON snapshot of the database to a local "backups" folder every 6 hours.
+///
+/// Meant for local development: it is OFF by default outside Development, because
+/// hosted containers (e.g. Render) have read-only app folders and throw files away
+/// on every redeploy. Override with Backup:AutoEnabled / Backup:Directory
+/// (env vars Backup__AutoEnabled / Backup__Directory).
+/// </summary>
+public class AutoBackupService(
+    IServiceProvider serviceProvider,
+    ILogger<AutoBackupService> logger,
+    IConfiguration config,
+    IHostEnvironment env) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var enabled = config.GetValue<bool?>("Backup:AutoEnabled") ?? env.IsDevelopment();
+        if (!enabled)
+        {
+            logger.LogInformation("AutoBackupService is disabled (set Backup:AutoEnabled=true to enable).");
+            return;
+        }
+
         // Short initial delay after app launch
         await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
 
@@ -33,11 +52,15 @@ public class AutoBackupService(IServiceProvider serviceProvider, ILogger<AutoBac
         using var scope = serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var rootDir = Directory.GetCurrentDirectory();
-        // Go up one level if executing inside backend/LifeOS.Api directory
-        var backupDir = Path.GetFileName(rootDir) == "LifeOS.Api"
-            ? Path.Combine(Directory.GetParent(rootDir)?.Parent?.FullName ?? rootDir, "backups")
-            : Path.Combine(rootDir, "backups");
+        var backupDir = config["Backup:Directory"];
+        if (string.IsNullOrWhiteSpace(backupDir))
+        {
+            var rootDir = Directory.GetCurrentDirectory();
+            // Go up one level if executing inside backend/LifeOS.Api directory
+            backupDir = Path.GetFileName(rootDir) == "LifeOS.Api"
+                ? Path.Combine(Directory.GetParent(rootDir)?.Parent?.FullName ?? rootDir, "backups")
+                : Path.Combine(rootDir, "backups");
+        }
 
         if (!Directory.Exists(backupDir))
         {
@@ -60,7 +83,9 @@ public class AutoBackupService(IServiceProvider serviceProvider, ILogger<AutoBac
                 playlists = await db.Playlists.AsNoTracking().ToListAsync(ct),
                 playlistItems = await db.PlaylistItems.AsNoTracking().ToListAsync(ct),
                 notifications = await db.Notifications.AsNoTracking().ToListAsync(ct),
-                plannedPurchases = await db.PlannedPurchases.AsNoTracking().ToListAsync(ct)
+                plannedPurchases = await db.PlannedPurchases.AsNoTracking().ToListAsync(ct),
+                categoryBudgets = await db.CategoryBudgets.AsNoTracking().ToListAsync(ct),
+                userSettings = await db.UserSettings.AsNoTracking().ToListAsync(ct)
             }
         };
 
@@ -71,6 +96,6 @@ public class AutoBackupService(IServiceProvider serviceProvider, ILogger<AutoBac
         };
 
         await File.WriteAllTextAsync(filePath, JsonSerializer.Serialize(dump, jsonOptions), ct);
-        logger.LogInformation("✅ AutoBackupService successfully created database snapshot: {FilePath}", filePath);
+        logger.LogInformation("AutoBackupService successfully created database snapshot: {FilePath}", filePath);
     }
 }

@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authenticated/calendar")({
   component: CalendarPage,
 });
 
-type View = "month" | "week" | "day";
+type View = "month" | "week" | "workweek" | "day";
 
 function CalendarPage() {
   const { data: items = [] } = useItems();
@@ -30,7 +30,7 @@ function CalendarPage() {
   const update = useUpdateItem();
   const del = useDeleteItem();
 
-  const [view, setView] = useState<View>("month");
+  const [view, setView] = useState<View>("week");
   const [cursor, setCursor] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
@@ -51,7 +51,7 @@ function CalendarPage() {
   const openNew = (d: Date) => setSelectedDate(d);
   const shift = (dir: 1 | -1) => {
     if (view === "month") setCursor((c) => (dir > 0 ? addMonths(c, 1) : subMonths(c, 1)));
-    if (view === "week") setCursor((c) => (dir > 0 ? addWeeks(c, 1) : subWeeks(c, 1)));
+    if (view === "week" || view === "workweek") setCursor((c) => (dir > 0 ? addWeeks(c, 1) : subWeeks(c, 1)));
     if (view === "day") setCursor((c) => addDays(c, dir));
   };
 
@@ -80,6 +80,7 @@ function CalendarPage() {
           <Tabs value={view} onValueChange={(v) => setView(v as View)}>
             <TabsList className="bg-muted/60">
               <TabsTrigger value="month" className="text-xs">Month</TabsTrigger>
+              <TabsTrigger value="workweek" className="text-xs">Work week</TabsTrigger>
               <TabsTrigger value="week" className="text-xs">Week</TabsTrigger>
               <TabsTrigger value="day" className="text-xs">Day</TabsTrigger>
             </TabsList>
@@ -90,7 +91,13 @@ function CalendarPage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="px-2 text-xs font-semibold text-foreground">
-              {format(cursor, view === "month" ? "MMMM yyyy" : view === "week" ? "'Week of' MMM d" : "EEEE, MMM d")}
+              {view === "month"
+                ? format(cursor, "MMMM yyyy")
+                : view === "week"
+                  ? format(startOfWeek(cursor), "'Week of' MMM d")
+                  : view === "workweek"
+                    ? format(startOfWeek(cursor, { weekStartsOn: 1 }), "'Week of' MMM d")
+                    : format(cursor, "EEEE, MMM d")}
             </span>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => shift(1)}>
               <ChevronRight className="h-4 w-4" />
@@ -105,17 +112,6 @@ function CalendarPage() {
             Today
           </Button>
 
-          <span
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-xs font-semibold text-red-500 tabular-nums"
-            title="Current time"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-            </span>
-            Now · {format(now, "p")}
-          </span>
-
           <Button onClick={() => openNew(roundToNextSlot(view === "month" ? cursor : new Date()))} className="bg-lagoon text-cream hover:bg-lagoon/90 text-xs gap-1.5 h-9 rounded-xl">
             <Plus className="h-4 w-4" /> New Event
           </Button>
@@ -128,6 +124,16 @@ function CalendarPage() {
       {view === "week" && (
         <TimeGrid
           days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(cursor), i))}
+          now={now}
+          eventsForDay={eventsForDay}
+          folderColor={folderColor}
+          onSlotClick={openNew}
+          onEventClick={setEditing}
+        />
+      )}
+      {view === "workweek" && (
+        <TimeGrid
+          days={Array.from({ length: 5 }, (_, i) => addDays(startOfWeek(cursor, { weekStartsOn: 1 }), i))}
           now={now}
           eventsForDay={eventsForDay}
           folderColor={folderColor}
@@ -432,7 +438,7 @@ function TimeGrid({
       <div className="overflow-x-auto">
         <div className={cn(isWeek && "min-w-[720px]")}>
           {/* Day headers */}
-          <div className="grid border-b bg-muted/40" style={gridCols}>
+          <div className="grid border-b" style={gridCols}>
             <div className="flex items-end justify-center pb-1 text-[9px] font-medium text-muted-foreground">
               {format(now, "O")}
             </div>
@@ -442,18 +448,17 @@ function TimeGrid({
                 <button
                   key={d.toISOString()}
                   onClick={() => onSlotClick(roundToNextSlot(d))}
-                  className="flex flex-col items-center gap-0.5 border-l py-2 transition hover:bg-accent/20"
+                  className={cn(
+                    "relative flex flex-col items-start border-l px-3 pb-2 pt-2.5 text-left transition hover:bg-accent/20",
+                    today && "text-primary"
+                  )}
                 >
-                  <span className={cn("text-[10px] font-semibold uppercase tracking-wider", today ? "text-red-500" : "text-clay")}>
-                    {format(d, isWeek ? "EEE" : "EEEE")}
-                  </span>
-                  <span
-                    className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-full font-display text-base",
-                      today ? "bg-red-500 text-white" : "text-lagoon/80"
-                    )}
-                  >
+                  {today && <span className="absolute inset-x-0 top-0 h-[3px] bg-primary" />}
+                  <span className={cn("font-display text-xl leading-none sm:text-2xl", today ? "font-semibold text-primary" : "text-foreground/80")}>
                     {format(d, "d")}
+                  </span>
+                  <span className={cn("mt-1 text-[11px]", today ? "font-semibold text-primary" : "text-muted-foreground")}>
+                    {format(d, isWeek && days.length > 5 ? "EEE" : "EEEE")}
                   </span>
                 </button>
               );
@@ -496,20 +501,12 @@ function TimeGrid({
                 {hours.map((h) => (
                   <div
                     key={h}
-                    className="absolute right-2 -translate-y-1/2 text-[10px] text-muted-foreground tabular-nums"
+                    className="absolute left-0 right-0 border-t border-transparent px-2 pt-1 text-right text-[10px] text-muted-foreground tabular-nums"
                     style={{ top: h * HOUR_HEIGHT }}
                   >
-                    {h === 0 ? "" : format(new Date(2000, 0, 1, h), "h a")}
+                    {format(new Date(2000, 0, 1, h), "h a")}
                   </div>
                 ))}
-                {showsToday && (
-                  <div
-                    className="absolute right-1 z-20 -translate-y-1/2 rounded-md bg-red-500 px-1 py-0.5 text-[9px] font-bold text-white tabular-nums shadow"
-                    style={{ top: nowTop }}
-                  >
-                    {format(now, "HH:mm")}
-                  </div>
-                )}
               </div>
 
               {/* Day columns */}
@@ -519,7 +516,7 @@ function TimeGrid({
                 return (
                   <div
                     key={d.toISOString()}
-                    className={cn("relative border-l", today && "bg-red-500/[0.03]")}
+                    className="relative border-l"
                     onClick={(ev) => {
                       const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect();
                       const minutes = Math.floor(((ev.clientY - rect.top) / HOUR_HEIGHT) * 2) * 30;
@@ -551,7 +548,7 @@ function TimeGrid({
                           className={cn(
                             "absolute z-10 overflow-hidden rounded-md border-l-[3px] px-1.5 py-0.5 text-left shadow-sm transition hover:z-20 hover:shadow-md",
                             past && "opacity-60",
-                            live && "ring-1 ring-red-500/60",
+                            live && "ring-1 ring-primary/60",
                             item.completed && "line-through"
                           )}
                           style={{
@@ -576,17 +573,16 @@ function TimeGrid({
                       );
                     })}
 
-                    {/* Current time line */}
-                    {today && (
-                      <div className="pointer-events-none absolute inset-x-0 z-30" style={{ top: nowTop }}>
-                        <div className="relative h-[2px] bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]">
-                          <span className="absolute -left-[5px] -top-[4px] h-[10px] w-[10px] rounded-full bg-red-500" />
-                        </div>
-                      </div>
-                    )}
-                    {/* Faint line across other days (like Teams) */}
-                    {!today && showsToday && (
-                      <div className="pointer-events-none absolute inset-x-0 z-0 border-t border-red-500/30" style={{ top: nowTop }} />
+                    {/* Current time: solid line in today's column, dotted across the other days (Teams-style) */}
+                    {showsToday && (
+                      <div
+                        className="pointer-events-none absolute inset-x-0 z-30 -translate-y-1/2"
+                        style={{
+                          top: nowTop,
+                          borderTop: today ? "2px solid #e3572b" : "1px dotted #e3572b",
+                        }}
+                        title={today ? `Now · ${format(now, "p")}` : undefined}
+                      />
                     )}
                   </div>
                 );
