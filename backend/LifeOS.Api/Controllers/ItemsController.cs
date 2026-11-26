@@ -13,6 +13,9 @@ namespace LifeOS.Api.Controllers;
 [Route("api/items")]
 public class ItemsController(AppDbContext db) : ControllerBase
 {
+    // Rich-text notebook pages are stored as JSON; images/files are uploaded separately.
+    private const int MaxContentLength = 1_000_000;
+
     // ── GET /api/items ────────────────────────────────────────────────────────
     [HttpGet]
     public async Task<ActionResult<List<ItemDto>>> GetAll()
@@ -35,8 +38,14 @@ public class ItemsController(AppDbContext db) : ControllerBase
         if (!Enum.TryParse<ItemType>(ToPascalCase(req.Type), out var itemType))
             return BadRequest(new { message = $"Invalid item type: {req.Type}" });
 
-        if (req.Content is not null && req.Content.Length > 250_000)
-            return BadRequest(new { message = "Content payload is too large (max 250KB). Please use an image URL instead of direct file uploads." });
+        if (req.Content is not null && req.Content.Length > MaxContentLength)
+            return BadRequest(new { message = "Content is too large (max 1 MB). Large images and files are uploaded separately — try removing some pasted content." });
+
+        if (req.ParentId.HasValue)
+        {
+            var parentError = await ValidateParentAsync(userId, req.ParentId.Value, null);
+            if (parentError is not null) return BadRequest(new { message = parentError });
+        }
 
         var item = new Item
         {
@@ -44,6 +53,7 @@ public class ItemsController(AppDbContext db) : ControllerBase
             Type = itemType,
             Title = req.Title,
             Content = req.Content,
+            ParentId = req.ParentId,
             FolderId = req.FolderId,
             Color = req.Color,
             Tags = req.Tags ?? [],
@@ -79,8 +89,8 @@ public class ItemsController(AppDbContext db) : ControllerBase
         if (req.Title is not null) item.Title = req.Title;
         if (req.Content is not null)
         {
-            if (req.Content.Length > 250_000)
-                return BadRequest(new { message = "Content payload is too large (max 250KB). Please use an image URL instead of direct file uploads." });
+            if (req.Content.Length > MaxContentLength)
+                return BadRequest(new { message = "Content is too large (max 1 MB). Large images and files are uploaded separately — try removing some pasted content." });
             item.Content = req.Content;
         }
         if (req.Color is not null) item.Color = req.Color;
@@ -95,6 +105,14 @@ public class ItemsController(AppDbContext db) : ControllerBase
         if (req.Height.HasValue) item.Height = req.Height;
 
         // Explicit null-clearing
+        if (req.ClearParentId == true) item.ParentId = null;
+        else if (req.ParentId.HasValue && req.ParentId != item.ParentId)
+        {
+            var parentError = await ValidateParentAsync(userId, req.ParentId.Value, item.Id);
+            if (parentError is not null) return BadRequest(new { message = parentError });
+            item.ParentId = req.ParentId;
+        }
+
         if (req.ClearFolderId == true) item.FolderId = null;
         else if (req.FolderId.HasValue) item.FolderId = req.FolderId;
 
@@ -135,13 +153,26 @@ public class ItemsController(AppDbContext db) : ControllerBase
     private static ItemDto ToDto(Item i) => new(
         i.Id, i.UserId,
         ToSnakeCase(i.Type.ToString()),
-        i.Title, i.Content, i.FolderId, i.Color, i.Tags,
+        i.Title, i.Content, i.ParentId, i.FolderId, i.Color, i.Tags,
         i.DueDate, i.EventDate,
         i.StartAt, i.EndAt,
         i.PosX, i.PosY, i.Width, i.Height,
         i.Priority, i.Completed, i.Pinned, i.Archived,
         i.CreatedAt, i.UpdatedAt
     );
+
+    /// <summary>Sub-tasks are one level deep: the parent must be the user's own top-level task.</summary>
+    private async Task<string?> ValidateParentAsync(Guid userId, Guid parentId, Guid? selfId)
+    {
+        if (selfId == parentId) return "A task can't be its own parent.";
+        var parent = await db.Items.AsNoTracking().FirstOrDefaultAsync(i => i.Id == parentId && i.UserId == userId);
+        if (parent is null) return "Parent task not found.";
+        if (parent.Type != ItemType.Task) return "Only tasks can contain sub-tasks.";
+        if (parent.ParentId is not null) return "Sub-tasks can't have their own sub-tasks.";
+        if (selfId is not null && await db.Items.AnyAsync(i => i.ParentId == selfId))
+            return "This task has its own sub-tasks, so it can't be moved inside another task.";
+        return null;
+    }
 
     // "notebook_page" → "NotebookPage"
     private static string ToPascalCase(string s) =>
