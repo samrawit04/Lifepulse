@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { StickyNote, NotebookText, CheckSquare, CalendarDays } from "lucide-react";
 import { useMemo } from "react";
 import type { Item } from "@/lib/lifeos-types";
+import { itemText } from "@/lib/notebook-content";
 
 const ICON = {
   sticky: StickyNote,
@@ -48,11 +49,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
               {list.slice(0, 8).map((it) => (
                 <CommandItem
                   key={it.id}
-                  value={`${it.title ?? ""} ${it.content ?? ""} ${it.tags.join(" ")}`}
+                  value={`${it.title ?? ""} ${itemText(it)} ${it.tags.join(" ")}`}
                   onSelect={() => go(type)}
                 >
                   <Icon className="mr-2 h-4 w-4" />
-                  <span className="truncate">{it.title || (it.content ?? "").slice(0, 60) || "Untitled"}</span>
+                  <span className="truncate">{it.title || itemText(it).slice(0, 60) || "Untitled"}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

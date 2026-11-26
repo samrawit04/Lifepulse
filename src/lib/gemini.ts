@@ -1,4 +1,5 @@
 import type { Item, Expense } from "@/lib/lifeos-types";
+import { notebookPlainText } from "@/lib/notebook-content";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 
@@ -34,7 +35,7 @@ function buildSystemPrompt(items: Item[], expenses: Expense[]): string {
     active
       .filter((i) => i.type === "notebook_page")
       .slice(0, 5)
-      .map((p) => `- ${p.title ?? "Untitled"}: ${(p.content ?? "").slice(0, 150)}`)
+      .map((p) => `- ${p.title ?? "Untitled"}: ${notebookPlainText(p.content).slice(0, 150)}`)
       .join("\n") || "No notebook pages.";
 
   const expenseMap: Record<string, number> = {};

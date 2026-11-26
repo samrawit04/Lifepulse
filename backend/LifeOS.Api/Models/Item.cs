@@ -10,6 +10,10 @@ public class Item
     public string? Title { get; set; }
     public string? Content { get; set; }
 
+    // Sub-tasks: a task can belong to a parent task ("task folder")
+    public Guid? ParentId { get; set; }
+    public Item? Parent { get; set; }
+
     public Guid? FolderId { get; set; }
     public Folder? Folder { get; set; }
 

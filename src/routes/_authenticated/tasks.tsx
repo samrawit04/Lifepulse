@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import {
   CheckSquare,
   Plus,
@@ -19,6 +19,12 @@ import {
   Pin,
   PinOff,
   AlarmClock,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
+  FolderPlus,
+  ListPlus,
+  X,
 } from "lucide-react";
 import { useCreateItem, useDeleteItem, useFolders, useItems, useUpdateItem } from "@/hooks/use-lifeos";
 import { PRIORITIES, type Item, type ItemUpdate } from "@/lib/lifeos-types";
@@ -79,15 +85,26 @@ function TasksPage() {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [activeDropTarget, setActiveDropTarget] = useState<ColumnId | null>(null);
 
-  const tasks = useMemo(() => items.filter((i) => i.type === "task" && !i.archived), [items]);
+  // Top-level tasks fill the board; sub-tasks are shown inside their parent ("task folder").
+  const tasks = useMemo(() => items.filter((i) => i.type === "task" && !i.archived && !i.parent_id), [items]);
+  const subtasksByParent = useMemo(() => {
+    const map = new Map<string, Item[]>();
+    for (const i of items) {
+      if (i.type !== "task" || i.archived || !i.parent_id) continue;
+      const list = map.get(i.parent_id) ?? [];
+      list.push(i);
+      map.set(i.parent_id, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+    return map;
+  }, [items]);
 
-  // Pinned (urgent) tasks always surface at the top of the first list.
+  // Pinned (urgent) tasks stay in their own column and are sorted to its top.
   const backlogTasks = useMemo(
     () =>
       tasks
         .filter((t) => {
           if (t.completed) return false;
-          if (t.pinned) return true;
           if (!t.due_date) return true;
           const due = startOfDay(new Date(t.due_date));
           const today = startOfDay(new Date());
@@ -101,7 +118,7 @@ function TasksPage() {
     () =>
       tasks
         .filter((t) => {
-          if (t.completed || t.pinned || !t.due_date) return false;
+          if (t.completed || !t.due_date) return false;
           const due = startOfDay(new Date(t.due_date));
           const today = startOfDay(new Date());
           return isToday(new Date(t.due_date)) || isBefore(due, today);
@@ -109,9 +126,6 @@ function TasksPage() {
         .sort(sortByDue),
     [tasks]
   );
-
-  const pinnedTasks = useMemo(() => backlogTasks.filter((t) => t.pinned), [backlogTasks]);
-  const unpinnedBacklog = useMemo(() => backlogTasks.filter((t) => !t.pinned), [backlogTasks]);
 
   const doneTasks = useMemo(
     () => tasks.filter((t) => t.completed).sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)),
@@ -271,6 +285,86 @@ function TasksPage() {
     }
   };
 
+  /** Completing a task folder also completes its sub-tasks. */
+  const toggleTask = (t: Item) => {
+    const completed = !t.completed;
+    update.mutate({ id: t.id, patch: { completed } });
+    if (completed) {
+      for (const s of subtasksByParent.get(t.id) ?? []) {
+        if (!s.completed) update.mutate({ id: s.id, patch: { completed: true } });
+      }
+    }
+  };
+
+  const archiveTask = (t: Item) => {
+    update.mutate({ id: t.id, patch: { archived: true } });
+    for (const s of subtasksByParent.get(t.id) ?? []) update.mutate({ id: s.id, patch: { archived: true } });
+  };
+
+  const addSubtask = (parent: Item, subTitle: string) =>
+    create.mutate(
+      { type: "task", title: subTitle, parent_id: parent.id, priority: parent.priority ?? "medium", completed: false },
+      { onError: (err) => toast.error(err.message || "Couldn't add sub-task") }
+    );
+
+  // ── Task folder wizard ──
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [folderDue, setFolderDue] = useState("");
+  const [folderSubtasks, setFolderSubtasks] = useState<string[]>([]);
+  const [folderSubInput, setFolderSubInput] = useState("");
+  const [folderSaving, setFolderSaving] = useState(false);
+
+  const openFolderDialog = () => {
+    setFolderName("");
+    setFolderDue("");
+    setFolderSubtasks([]);
+    setFolderSubInput("");
+    setFolderOpen(true);
+  };
+
+  const pushFolderSubtask = () => {
+    const v = folderSubInput.trim();
+    if (!v) return;
+    setFolderSubtasks((prev) => [...prev, v]);
+    setFolderSubInput("");
+  };
+
+  const createFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!folderName.trim()) return;
+    const pendingInput = folderSubInput.trim();
+    const subs = pendingInput ? [...folderSubtasks, pendingInput] : folderSubtasks;
+    setFolderSaving(true);
+    try {
+      const parent = await create.mutateAsync({
+        type: "task",
+        title: folderName.trim(),
+        tags: ["folder"],
+        priority: "medium",
+        due_date: folderDue ? new Date(folderDue).toISOString() : null,
+        completed: false,
+      });
+      for (const sub of subs) {
+        await create.mutateAsync({ type: "task", title: sub, parent_id: parent.id, priority: "medium", completed: false });
+      }
+      toast.success(subs.length ? `Folder created with ${subs.length} sub-task${subs.length > 1 ? "s" : ""}` : "Task folder created");
+      setFolderOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Couldn't create the folder");
+    } finally {
+      setFolderSaving(false);
+    }
+  };
+
+  const treeValue = {
+    subtasksOf: (id: string) => subtasksByParent.get(id) ?? [],
+    onToggle: (t: Item) => toggleTask(t),
+    onEdit: (t: Item) => openEditModal(t),
+    onDelete: (t: Item) => setConfirmDeleteId(t.id),
+    onAdd: addSubtask,
+  };
+
   const togglePin = (t: Item) =>
     update.mutate(
       { id: t.id, patch: { pinned: !t.pinned } },
@@ -298,6 +392,14 @@ function TasksPage() {
           >
             <Plus className="h-3.5 w-3.5" /> New Task
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openFolderDialog}
+            className="h-8 gap-1.5 text-xs font-semibold"
+          >
+            <FolderPlus className="h-3.5 w-3.5" /> New Folder
+          </Button>
 
           <div className="flex items-center gap-1 rounded-xl border bg-card p-1 shadow-soft">
             <Button
@@ -321,6 +423,7 @@ function TasksPage() {
       </header>
 
       {/* Scrollable task area only */}
+      <TaskTreeCtx.Provider value={treeValue}>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6">
 
         {isLoading ? (
@@ -343,9 +446,9 @@ function TasksPage() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onToggle={(t) => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
+              onToggle={(t) => toggleTask(t)}
               onDelete={(t) => setConfirmDeleteId(t.id)}
-              onArchive={(t) => update.mutate({ id: t.id, patch: { archived: true } })}
+              onArchive={(t) => archiveTask(t)}
               onEdit={openEditModal}
               onTogglePin={togglePin}
               onMoveToToday={(t) => update.mutate({ id: t.id, patch: moveToTodayPatch(t) })}
@@ -364,9 +467,9 @@ function TasksPage() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onToggle={(t) => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
+              onToggle={(t) => toggleTask(t)}
               onDelete={(t) => setConfirmDeleteId(t.id)}
-              onArchive={(t) => update.mutate({ id: t.id, patch: { archived: true } })}
+              onArchive={(t) => archiveTask(t)}
               onEdit={openEditModal}
               onTogglePin={togglePin}
               onMoveToBacklog={(t) => update.mutate({ id: t.id, patch: { completed: false, due_date: null, start_at: null, end_at: null } })}
@@ -385,9 +488,9 @@ function TasksPage() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onToggle={(t) => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
+              onToggle={(t) => toggleTask(t)}
               onDelete={(t) => setConfirmDeleteId(t.id)}
-              onArchive={(t) => update.mutate({ id: t.id, patch: { archived: true } })}
+              onArchive={(t) => archiveTask(t)}
               onEdit={openEditModal}
               onTogglePin={togglePin}
             />
@@ -397,30 +500,6 @@ function TasksPage() {
             {backlogTasks.length === 0 && todayTasks.length === 0 && doneTasks.length === 0 && (
               <div className="rounded-2xl border bg-card p-10 text-center text-muted-foreground">
                 A quiet list. Add your first task above.
-              </div>
-            )}
-
-            {pinnedTasks.length > 0 && (
-              <div>
-                <h2 className="mb-2 text-sm font-semibold text-amber-500 flex items-center gap-1.5">
-                  <Pin className="h-4 w-4" /> Pinned · Urgent ({pinnedTasks.length})
-                </h2>
-                <div className="space-y-2">
-                  {pinnedTasks.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      task={t}
-                      folders={folders}
-                      isDragging={draggedItemId === t.id}
-                      onDragStart={handleDragStart}
-                      onToggle={() => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
-                      onDelete={() => setConfirmDeleteId(t.id)}
-                      onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
-                      onEdit={() => openEditModal(t)}
-                      onTogglePin={() => togglePin(t)}
-                    />
-                  ))}
-                </div>
               </div>
             )}
 
@@ -437,9 +516,9 @@ function TasksPage() {
                       folders={folders}
                       isDragging={draggedItemId === t.id}
                       onDragStart={handleDragStart}
-                      onToggle={() => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
+                      onToggle={() => toggleTask(t)}
                       onDelete={() => setConfirmDeleteId(t.id)}
-                      onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
+                      onArchive={() => archiveTask(t)}
                       onEdit={() => openEditModal(t)}
                       onTogglePin={() => togglePin(t)}
                     />
@@ -448,22 +527,22 @@ function TasksPage() {
               </div>
             )}
 
-            {unpinnedBacklog.length > 0 && (
+            {backlogTasks.length > 0 && (
               <div>
                 <h2 className="mb-2 text-sm font-semibold text-lagoon flex items-center gap-1.5">
-                  <Clock className="h-4 w-4" /> Backlog ({unpinnedBacklog.length})
+                  <Clock className="h-4 w-4" /> Backlog ({backlogTasks.length})
                 </h2>
                 <div className="space-y-2">
-                  {unpinnedBacklog.map((t) => (
+                  {backlogTasks.map((t) => (
                     <TaskCard
                       key={t.id}
                       task={t}
                       folders={folders}
                       isDragging={draggedItemId === t.id}
                       onDragStart={handleDragStart}
-                      onToggle={() => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
+                      onToggle={() => toggleTask(t)}
                       onDelete={() => setConfirmDeleteId(t.id)}
-                      onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
+                      onArchive={() => archiveTask(t)}
                       onEdit={() => openEditModal(t)}
                       onTogglePin={() => togglePin(t)}
                     />
@@ -485,9 +564,9 @@ function TasksPage() {
                       folders={folders}
                       isDragging={draggedItemId === t.id}
                       onDragStart={handleDragStart}
-                      onToggle={() => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
+                      onToggle={() => toggleTask(t)}
                       onDelete={() => setConfirmDeleteId(t.id)}
-                      onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
+                      onArchive={() => archiveTask(t)}
                       onEdit={() => openEditModal(t)}
                       onTogglePin={() => togglePin(t)}
                     />
@@ -498,6 +577,91 @@ function TasksPage() {
           </div>
         )}
       </div>
+
+      </TaskTreeCtx.Provider>
+
+      {/* Task Folder Wizard */}
+      <Dialog open={folderOpen} onOpenChange={setFolderOpen}>
+        <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl w-[calc(100vw-2rem)] sm:max-w-md p-5 sm:p-6">
+          <form onSubmit={createFolder}>
+            <DialogHeader>
+              <DialogTitle className="font-display text-lg font-bold text-foreground">New task folder</DialogTitle>
+              <p className="text-xs text-muted-foreground">Group related work and tick off sub-tasks one by one.</p>
+            </DialogHeader>
+            <div className="space-y-4 py-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="folder-name" className="text-xs font-semibold text-foreground">Folder name</Label>
+                <Input
+                  id="folder-name"
+                  value={folderName}
+                  onChange={(e) => setFolderName(e.target.value)}
+                  placeholder="e.g. Launch the new website"
+                  autoFocus
+                  className="h-10 rounded-xl border-input bg-background text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="folder-due" className="text-xs font-semibold text-foreground">Due date (optional)</Label>
+                <Input
+                  id="folder-due"
+                  type="date"
+                  value={folderDue}
+                  onChange={(e) => setFolderDue(e.target.value)}
+                  className="h-9 rounded-xl border-input bg-background text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="folder-sub" className="text-xs font-semibold text-foreground">Sub-tasks</Label>
+                {folderSubtasks.length > 0 && (
+                  <ul className="space-y-1">
+                    {folderSubtasks.map((st, i) => (
+                      <li key={i} className="flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm">
+                        <span className="flex-1 truncate">{st}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFolderSubtasks((prev) => prev.filter((_, j) => j !== i))}
+                          className="text-muted-foreground hover:text-destructive"
+                          title="Remove"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    id="folder-sub"
+                    value={folderSubInput}
+                    onChange={(e) => setFolderSubInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        pushFolderSubtask();
+                      }
+                    }}
+                    placeholder="Add a sub-task and press Enter"
+                    className="h-9 rounded-xl border-input bg-background text-sm"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={pushFolderSubtask} className="h-9 rounded-xl">
+                    Add
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">You can add more later from the folder card.</p>
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setFolderOpen(false)} className="h-9 rounded-xl text-xs">
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={!folderName.trim() || folderSaving} className="h-9 rounded-xl px-4 text-xs font-semibold">
+                {folderSaving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="mr-1 h-3.5 w-3.5" />}
+                Create folder
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Task Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -688,7 +852,11 @@ function TasksPage() {
         open={confirmDeleteId !== null}
         onOpenChange={(o) => !o && setConfirmDeleteId(null)}
         title="Delete this task?"
-        description="This task will be permanently deleted. This action cannot be undone."
+        description={
+          confirmDeleteId && (subtasksByParent.get(confirmDeleteId)?.length ?? 0) > 0
+            ? `This folder and its ${subtasksByParent.get(confirmDeleteId)!.length} sub-task(s) will be permanently deleted.`
+            : "This task will be permanently deleted. This action cannot be undone."
+        }
         confirmLabel="Delete Task"
         onConfirm={() => {
           if (confirmDeleteId) {
@@ -700,6 +868,16 @@ function TasksPage() {
     </div>
   );
 }
+
+type TaskTree = {
+  subtasksOf: (id: string) => Item[];
+  onToggle: (t: Item) => void;
+  onEdit: (t: Item) => void;
+  onDelete: (t: Item) => void;
+  onAdd: (parent: Item, title: string) => void;
+};
+
+const TaskTreeCtx = createContext<TaskTree | null>(null);
 
 interface KanbanColumnProps {
   columnId: ColumnId;
@@ -835,6 +1013,22 @@ function TaskCard({
   onMoveToToday,
   onMoveToBacklog,
 }: TaskCardProps) {
+  const tree = useContext(TaskTreeCtx);
+  const subtasks = tree?.subtasksOf(task.id) ?? [];
+  const isFolder = (task.tags ?? []).includes("folder") || subtasks.length > 0;
+  const doneCount = subtasks.filter((s) => s.completed).length;
+  const [expanded, setExpanded] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newSub, setNewSub] = useState("");
+
+  const submitSub = () => {
+    const v = newSub.trim();
+    if (!v || !tree) return;
+    tree.onAdd(task, v);
+    setNewSub("");
+    setExpanded(true);
+  };
+
   const folder = folders.find((f) => f.id === task.folder_id);
   const overdue =
     task.due_date &&
@@ -843,15 +1037,16 @@ function TaskCard({
 
   return (
     <div
-      draggable
+      draggable={!adding}
       onDragStart={(e) => onDragStart(e, task.id)}
       className={cn(
-        "group relative flex items-start gap-2 rounded-xl border bg-card p-2.5 sm:p-3 shadow-soft transition hover:shadow-md cursor-grab active:cursor-grabbing select-none",
+        "group relative rounded-xl border bg-card p-2.5 sm:p-3 shadow-soft transition hover:shadow-md cursor-grab active:cursor-grabbing select-none",
         task.completed && "opacity-60 bg-muted/30",
         task.pinned && !task.completed && "border-amber-400/50 bg-amber-400/[0.06] ring-1 ring-amber-400/20",
         isDragging && "opacity-40 border-dashed border-primary"
       )}
     >
+      <div className="flex items-start gap-2">
       <div className="mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground transition">
         <GripVertical className="h-3.5 w-3.5" />
       </div>
@@ -859,8 +1054,9 @@ function TaskCard({
       <Checkbox checked={task.completed} onCheckedChange={onToggle} className="mt-0.5 h-3.5 w-3.5" />
 
       <div className="min-w-0 flex-1 cursor-pointer" onClick={onEdit}>
-        <p className={cn("text-xs sm:text-[13px] font-medium text-foreground leading-snug hover:text-primary transition", task.completed && "line-through text-muted-foreground")}>
-          {task.title}
+        <p className={cn("flex items-center gap-1.5 text-xs sm:text-[13px] font-medium text-foreground leading-snug hover:text-primary transition", task.completed && "line-through text-muted-foreground")}>
+          {isFolder && <FolderOpen className="h-3.5 w-3.5 shrink-0 text-primary" />}
+          <span className="min-w-0">{task.title}</span>
         </p>
 
         {task.content && (
@@ -873,6 +1069,17 @@ function TaskCard({
           {task.pinned && !task.completed && (
             <span className="flex items-center gap-1 rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
               <Pin className="h-2.5 w-2.5 fill-current" /> Pinned
+            </span>
+          )}
+
+          {isFolder && subtasks.length > 0 && (
+            <span
+              className={cn(
+                "rounded-md px-1.5 py-0.5 text-[9px] font-semibold",
+                doneCount === subtasks.length ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-primary/10 text-primary"
+              )}
+            >
+              {doneCount}/{subtasks.length} done
             </span>
           )}
 
@@ -936,6 +1143,15 @@ function TaskCard({
             {task.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
           </button>
         )}
+        {!task.completed && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setAdding(true); setExpanded(true); }}
+            className="rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary transition"
+            title="Add sub-task"
+          >
+            <ListPlus className="h-3 w-3" />
+          </button>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
           className="rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary transition"
@@ -976,9 +1192,78 @@ function TaskCard({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
+      </div>
+
+      {(isFolder || adding) && (
+        <div className="mt-2 border-t border-border/60 pt-2 sm:ml-[38px]" onClick={(e) => e.stopPropagation()}>
+          {subtasks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="mb-1 flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {subtasks.length} sub-task{subtasks.length === 1 ? "" : "s"}
+            </button>
+          )}
+          {subtasks.length > 0 && (
+            <div className="mb-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(doneCount / subtasks.length) * 100}%` }} />
+            </div>
+          )}
+          {expanded && subtasks.length > 0 && (
+            <ul className="space-y-0.5">
+              {subtasks.map((st) => (
+                <li key={st.id} className="group/sub flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-muted/50">
+                  <Checkbox checked={st.completed} onCheckedChange={() => tree?.onToggle(st)} className="h-3.5 w-3.5" />
+                  <button
+                    type="button"
+                    onClick={() => tree?.onEdit(st)}
+                    className={cn("min-w-0 flex-1 truncate text-left text-xs text-foreground hover:text-primary", st.completed && "text-muted-foreground line-through")}
+                  >
+                    {st.title}
+                  </button>
+                  {st.due_date && (
+                    <span className="shrink-0 text-[9px] text-muted-foreground">
+                      {isToday(new Date(st.due_date)) ? "Today" : format(new Date(st.due_date), "MMM d")}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => tree?.onDelete(st)}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive sm:opacity-0 sm:group-hover/sub:opacity-100"
+                    title="Delete sub-task"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!task.completed && (adding || expanded) && (
+            <form
+              onSubmit={(e) => { e.preventDefault(); submitSub(); }}
+              className="mt-1 flex items-center gap-1.5"
+            >
+              <Plus className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <input
+                value={newSub}
+                onChange={(e) => setNewSub(e.target.value)}
+                onFocus={() => setAdding(true)}
+                onBlur={() => { if (!newSub.trim()) setAdding(false); }}
+                onKeyDown={(e) => { if (e.key === "Escape") { setNewSub(""); setAdding(false); (e.target as HTMLInputElement).blur(); } }}
+                autoFocus={adding && subtasks.length === 0}
+                placeholder="Add a sub-task…"
+                className="h-7 min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+              />
+            </form>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
 
 function sortByDue(a: Item, b: Item) {
   // Pinned (urgent) tasks always come first.
