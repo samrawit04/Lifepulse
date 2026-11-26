@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useUserSetting } from "@/hooks/use-user-setting";
 import { createPortal } from "react-dom";
 import { useMusicPlayer, type VideoInfo } from "@/lib/music-player-context";
 import { apiClient, type Playlist, type PlaylistItem } from "@/integrations/api/client";
@@ -20,7 +22,6 @@ import {
   Check,
   X,
   FolderPlus,
-  Radio,
   ThumbsUp,
   Sparkles,
   ListOrdered,
@@ -29,6 +30,8 @@ import {
   Compass,
   Headphones,
   Tv,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,43 +45,80 @@ export const Route = createFileRoute("/_authenticated/music")({
   }),
 });
 
-const PRESETS: VideoInfo[] = [
-  {
-    videoId: "jfKfPfyJRdk",
-    title: "lofi hip hop radio 📚 beats to study/relax to",
-    channelName: "Lofi Girl",
-    thumbnail: "https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg",
+// ─── Recommendations (live from YouTube, personalised from your playlists) ────
+type Recommendation = VideoInfo & { reason: string };
+
+function regionFromLocale(): string | null {
+  if (typeof navigator === "undefined") return null;
+  const m = (navigator.language || "").match(/-([A-Z]{2})$/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+function toVideoInfo(id: string, snippet: any): VideoInfo {
+  return {
+    videoId: id,
+    title: snippet?.title ?? "Untitled",
+    channelName: snippet?.channelTitle ?? "YouTube",
+    thumbnail:
+      snippet?.thumbnails?.high?.url ||
+      snippet?.thumbnails?.medium?.url ||
+      `https://img.youtube.com/vi/${id}/hqdefault.jpg`,
     durationSeconds: 0,
-  },
-  {
-    videoId: "5qap5aO4i9A",
-    title: "lofi hip hop radio 💤 beats to sleep/chill to",
-    channelName: "Lofi Girl",
-    thumbnail: "https://img.youtube.com/vi/5qap5aO4i9A/hqdefault.jpg",
-    durationSeconds: 0,
-  },
-  {
-    videoId: "vF5L-pMmsr0",
-    title: "Coffee Shop Ambience ☕ Smooth Jazz & Rain Sounds",
-    channelName: "Cafe Music BGM channel",
-    thumbnail: "https://img.youtube.com/vi/vF5L-pMmsr0/hqdefault.jpg",
-    durationSeconds: 10800,
-  },
-  {
-    videoId: "4xDzrJKXOOY",
-    title: "synthwave radio 🌌 beats to chill/game to",
-    channelName: "Lofi Girl",
-    thumbnail: "https://img.youtube.com/vi/4xDzrJKXOOY/hqdefault.jpg",
-    durationSeconds: 0,
-  },
-  {
-    videoId: "mPZkdNFkNps",
-    title: "Cozy Rain & Thunderstorm ⛈️ Sleep, Study, Relaxing Ambience",
-    channelName: "Rainstorm Ambience",
-    thumbnail: "https://img.youtube.com/vi/mPZkdNFkNps/hqdefault.jpg",
-    durationSeconds: 28800,
-  },
-];
+  };
+}
+
+async function fetchTrendingMusic(apiKey: string): Promise<VideoInfo[]> {
+  const base = `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&maxResults=12&key=${apiKey}`;
+  const region = regionFromLocale();
+  // Not every region has a music chart — fall back to the global one.
+  for (const url of region ? [`${base}&regionCode=${region}`, base] : [base]) {
+    const res = await fetch(url);
+    if (!res.ok) continue;
+    const data = await res.json();
+    if (Array.isArray(data.items) && data.items.length > 0) {
+      return data.items.map((it: any) => toVideoInfo(it.id, it.snippet));
+    }
+  }
+  return [];
+}
+
+async function searchMusic(apiKey: string, q: string, max = 8): Promise<VideoInfo[]> {
+  const res = await fetch(
+    `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=${max}&q=${encodeURIComponent(q)}&key=${apiKey}`
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.items ?? [])
+    .filter((it: any) => it?.id?.videoId)
+    .map((it: any) => toVideoInfo(it.id.videoId, it.snippet));
+}
+
+async function fetchRecommendations(apiKey: string, seeds: string[], exclude: string[]): Promise<Recommendation[]> {
+  const [trending, ...seeded] = await Promise.all([
+    fetchTrendingMusic(apiKey).catch(() => [] as VideoInfo[]),
+    ...seeds.map((seed) => searchMusic(apiKey, seed).catch(() => [] as VideoInfo[])),
+  ]);
+
+  const lists: Recommendation[][] = [
+    ...seeded.map((list, i) => list.map((v) => ({ ...v, reason: `Because you like ${seeds[i]}` }))),
+    trending.map((v) => ({ ...v, reason: "Trending in music" })),
+  ];
+
+  // Interleave the lists so the feed mixes personal picks and trending tracks
+  const seen = new Set(exclude);
+  const out: Recommendation[] = [];
+  const longest = Math.max(0, ...lists.map((l) => l.length));
+  for (let i = 0; i < longest && out.length < 18; i++) {
+    for (const list of lists) {
+      const v = list[i];
+      if (v && !seen.has(v.videoId)) {
+        seen.add(v.videoId);
+        out.push(v);
+      }
+    }
+  }
+  return out;
+}
 
 const DEFAULT_QUICK_WORDS = [
   "Lofi Hip Hop",
@@ -238,8 +278,8 @@ function VideoCard({
           <p className="mt-1 truncate text-xs text-muted-foreground">{video.channelName}</p>
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2">
-          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-            <Compass className="h-3 w-3" /> {badge ?? "YouTube Stream"}
+          <span className="min-w-0 text-[10px] text-muted-foreground flex items-center gap-1">
+            <Compass className="h-3 w-3 shrink-0" /> <span className="truncate">{badge ?? "YouTube Stream"}</span>
           </span>
           <AddToPlaylistButton video={video} playlists={playlists} onAdd={onAdd} />
         </div>
@@ -261,32 +301,20 @@ function MusicPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<VideoInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [activeMainTab, setActiveMainTab] = useState<"player" | "search" | "curated">("player");
+  // Recommendations are the landing view until something is playing
+  const [activeMainTab, setActiveMainTab] = useState<"foryou" | "player" | "search">(() =>
+    currentVideo ? "player" : "foryou"
+  );
   const [liked, setLiked] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Editable Quick Search Suggestions
-  const [quickWords, setQuickWords] = useState<string[]>([]);
+  // Editable Quick Search Suggestions (saved to your account)
+  const { value: quickWords, save: saveQuickWords } = useUserSetting<string[]>(
+    "music-quick-words",
+    DEFAULT_QUICK_WORDS
+  );
   const [isAddingWord, setIsAddingWord] = useState(false);
   const [newWordInput, setNewWordInput] = useState("");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("lifepulse.music.quickwords");
-    if (saved) {
-      try {
-        setQuickWords(JSON.parse(saved));
-      } catch {
-        setQuickWords(DEFAULT_QUICK_WORDS);
-      }
-    } else {
-      setQuickWords(DEFAULT_QUICK_WORDS);
-    }
-  }, []);
-
-  const saveQuickWords = (newWords: string[]) => {
-    setQuickWords(newWords);
-    localStorage.setItem("lifepulse.music.quickwords", JSON.stringify(newWords));
-  };
 
   const addQuickWord = (word: string) => {
     const trimmed = word.trim();
@@ -303,6 +331,34 @@ function MusicPage() {
   };
 
   const youtubeApiKey = import.meta.env.VITE_YOUTUBE_API_KEY || "";
+
+  // Seeds for "For You": artists from your playlist, then what's playing, then a quick word
+  const recommendationSeeds = useMemo(() => {
+    const channels: string[] = [];
+    const sorted = [...playlistItems].sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
+    for (const item of sorted) {
+      const ch = item.channelName?.trim();
+      if (ch && !channels.includes(ch)) channels.push(ch);
+      if (channels.length >= 2) break;
+    }
+    if (channels.length < 2 && currentVideo?.channelName && !channels.includes(currentVideo.channelName)) {
+      channels.push(currentVideo.channelName);
+    }
+    if (channels.length < 2 && quickWords[0] && !channels.includes(quickWords[0])) {
+      channels.push(quickWords[0]);
+    }
+    return channels.slice(0, 2);
+  }, [playlistItems, currentVideo?.channelName, quickWords]);
+
+  const excludeIds = useMemo(() => playlistItems.map((i) => i.videoId), [playlistItems]);
+
+  const recommendations = useQuery({
+    queryKey: ["music-recommendations", recommendationSeeds, excludeIds.length],
+    queryFn: () => fetchRecommendations(youtubeApiKey, recommendationSeeds, excludeIds),
+    enabled: Boolean(youtubeApiKey),
+    staleTime: 1000 * 60 * 30,
+    refetchOnWindowFocus: false,
+  });
 
 
   useEffect(() => { loadPlaylists(); }, []);
@@ -663,7 +719,7 @@ function MusicPage() {
         <div className="mx-6 mt-4 flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-200">
           <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
           <p>
-            YouTube API Key missing. Add <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300">VITE_YOUTUBE_API_KEY</code> to <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300">.env</code> for live search, or use the curated streams below.
+            YouTube API Key missing. Add <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300">VITE_YOUTUBE_API_KEY</code> to <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300">.env</code> to enable recommendations and live search.
           </p>
         </div>
       )}
@@ -677,7 +733,7 @@ function MusicPage() {
 
             {/* Tab Navigation */}
             <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto scrollbar-none">
-              {(["player", "search", "curated"] as const).map((tab) => (
+              {(["foryou", "player", "search"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveMainTab(tab)}
@@ -690,8 +746,8 @@ function MusicPage() {
                 >
                   {tab === "player" && <Tv className="h-4 w-4" />}
                   {tab === "search" && <Search className="h-4 w-4" />}
-                  {tab === "curated" && <Radio className="h-4 w-4" />}
-                  <span>{tab === "player" ? "Active Player" : tab === "search" ? "Search Results" : "Curated Sounds"}</span>
+                  {tab === "foryou" && <Sparkles className="h-4 w-4" />}
+                  <span>{tab === "player" ? "Active Player" : tab === "search" ? "Search Results" : "For You"}</span>
                   {tab === "player" && currentVideo && (
                     <span className="flex h-2 w-2 relative">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
@@ -723,7 +779,7 @@ function MusicPage() {
                     <div>
                       <h2 className="text-xl font-bold text-foreground">Select a video or playlist</h2>
                       <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-                        Search for tracks or pick from curated streams to start listening.
+                        Pick something from For You or search for a track to start listening.
                       </p>
                     </div>
                   </div>
@@ -846,30 +902,78 @@ function MusicPage() {
             )}
 
             {/* ─────────────────────────────────────────────────
-                CURATED SOUNDS TAB
+                FOR YOU (recommendations) TAB
             ───────────────────────────────────────────────── */}
-            {activeMainTab === "curated" && (
+            {activeMainTab === "foryou" && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                    <Radio className="h-4 w-4 text-primary" /> Curated Soundscapes
-                  </h2>
-                  <span className="text-xs text-muted-foreground">Handpicked 24/7 focus streams</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+                  <div>
+                    <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" /> Recommended for you
+                    </h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {recommendationSeeds.length > 0
+                        ? `Based on ${recommendationSeeds.join(" & ")} and what's trending`
+                        : "Trending music right now — add songs to a playlist to personalise this"}
+                    </p>
+                  </div>
+                  {youtubeApiKey && (
+                    <button
+                      onClick={() => recommendations.refetch()}
+                      disabled={recommendations.isFetching}
+                      className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-white/10 transition disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("h-3.5 w-3.5", recommendations.isFetching && "animate-spin")} />
+                      Refresh
+                    </button>
+                  )}
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {PRESETS.map((video) => (
-                    <VideoCard
-                      key={video.videoId}
-                      video={video}
-                      isActive={currentVideo?.videoId === video.videoId}
-                      isPlaying={isPlaying}
-                      playlists={playlists}
-                      onPlay={() => handlePlayTrack(video)}
-                      onAdd={handleAddToPlaylist}
-                      badge="Focus Stream"
-                    />
-                  ))}
-                </div>
+
+                {!youtubeApiKey ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center glass-card rounded-2xl">
+                    <Compass className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                    <h3 className="text-base font-bold text-foreground">Recommendations need a YouTube API key</h3>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      Add VITE_YOUTUBE_API_KEY to your .env to see personalised picks here.
+                    </p>
+                  </div>
+                ) : recommendations.isLoading ? (
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="aspect-video rounded-2xl border border-white/5 bg-white/[0.04] animate-pulse" />
+                    ))}
+                  </div>
+                ) : recommendations.isError || (recommendations.data ?? []).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center glass-card rounded-2xl">
+                    <Headphones className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                    <h3 className="text-base font-bold text-foreground">No recommendations right now</h3>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      Try refreshing, or search for something above.
+                    </p>
+                    <button
+                      onClick={() => recommendations.refetch()}
+                      className="mt-3 flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary"
+                    >
+                      {recommendations.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Try again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {(recommendations.data ?? []).map((video) => (
+                      <VideoCard
+                        key={video.videoId}
+                        video={video}
+                        isActive={currentVideo?.videoId === video.videoId}
+                        isPlaying={isPlaying}
+                        playlists={playlists}
+                        onPlay={() => handlePlayTrack(video)}
+                        onAdd={handleAddToPlaylist}
+                        badge={video.reason}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

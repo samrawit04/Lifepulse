@@ -90,9 +90,6 @@ export const ALL_SIDEBAR_ITEMS: SidebarConfigItem[] = [
   },
 ];
 
-// Fallback localStorage key (used as initial value before backend loads)
-const PREFS_STORAGE_KEY = "lifepulse.sidebar.preferences.v1";
-
 export type SidebarPreferences = Record<string, boolean>;
 
 function buildDefaultPrefs(): SidebarPreferences {
@@ -123,24 +120,9 @@ function prefsToHiddenArray(prefs: SidebarPreferences): string[] {
   ).map((item) => item.to);
 }
 
-function getLocalPrefs(): SidebarPreferences {
-  try {
-    const raw = localStorage.getItem(PREFS_STORAGE_KEY);
-    if (!raw) return buildDefaultPrefs();
-    const parsed = JSON.parse(raw) as SidebarPreferences;
-    ALL_SIDEBAR_ITEMS.forEach((item) => {
-      if (item.required) parsed[item.to] = true;
-      else if (parsed[item.to] === undefined) parsed[item.to] = true;
-    });
-    return parsed;
-  } catch {
-    return buildDefaultPrefs();
-  }
-}
-
 export function useSidebarPreferences() {
   const qc = useQueryClient();
-  const [preferences, setPreferences] = useState<SidebarPreferences>(getLocalPrefs);
+  const [preferences, setPreferences] = useState<SidebarPreferences>(buildDefaultPrefs);
 
   // Sync from backend profile when it loads
   useEffect(() => {
@@ -176,10 +158,6 @@ export function useSidebarPreferences() {
         if (item.required) newPrefs[item.to] = true;
       });
       setPreferences(newPrefs);
-      // Save to localStorage as fallback
-      try {
-        localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(newPrefs));
-      } catch {}
 
       // Persist to backend
       const hiddenItems = prefsToHiddenArray(newPrefs);

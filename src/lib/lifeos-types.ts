@@ -9,6 +9,10 @@ export interface Item {
   tags: string[];
   due_date: string | null;
   event_date: string | null;
+  /** Scheduled start (tasks/events). ISO timestamp. */
+  start_at: string | null;
+  /** Scheduled end (tasks/events). ISO timestamp. */
+  end_at: string | null;
   pos_x: number | null;
   pos_y: number | null;
   width: number | null;
@@ -122,20 +126,6 @@ export function noteGradient(color: string | null | undefined): string {
 /** Solid-ish color for legacy usages (e.g. dashboard tiles). */
 export function noteColorCss(color: string | null | undefined): string {
   return noteColor(color).from;
-}
-
-/** Ultra-light subtle atmospheric mood wash for full-screen notebook pages. */
-export function notebookPageBackground(color: string | null | undefined): Record<string, string> | undefined {
-  if (!color) return undefined;
-  const c = NOTE_COLORS.find((x) => x.value === color);
-  if (!c) return undefined;
-  const fromTint = c.from.replace(")", " / 0.42)");
-  const toTint = c.to.replace(")", " / 0.18)");
-  const baseColor = c.from.replace(")", " / 0.15)");
-  return {
-    backgroundColor: baseColor,
-    backgroundImage: `radial-gradient(ellipse 140% 95% at 50% -10%, ${fromTint} 0%, ${toTint} 75%, transparent 100%)`,
-  };
 }
 
 export const PRIORITIES = [

@@ -49,12 +49,19 @@ public class ItemsController(AppDbContext db) : ControllerBase
             Tags = req.Tags ?? [],
             DueDate = req.DueDate,
             EventDate = req.EventDate,
+            StartAt = req.StartAt,
+            EndAt = req.EndAt,
             PosX = req.PosX,
             PosY = req.PosY,
             Width = req.Width,
             Height = req.Height,
             Priority = req.Priority,
+            Pinned = req.Pinned ?? false,
+            Completed = req.Completed ?? false,
         };
+
+        if (item.StartAt.HasValue && item.EndAt.HasValue && item.EndAt <= item.StartAt)
+            return BadRequest(new { message = "End time must be after start time." });
 
         db.Items.Add(item);
         await db.SaveChangesAsync();
@@ -97,6 +104,15 @@ public class ItemsController(AppDbContext db) : ControllerBase
         if (req.ClearEventDate == true) item.EventDate = null;
         else if (req.EventDate.HasValue) item.EventDate = req.EventDate;
 
+        if (req.ClearStartAt == true) item.StartAt = null;
+        else if (req.StartAt.HasValue) item.StartAt = req.StartAt;
+
+        if (req.ClearEndAt == true) item.EndAt = null;
+        else if (req.EndAt.HasValue) item.EndAt = req.EndAt;
+
+        if (item.StartAt.HasValue && item.EndAt.HasValue && item.EndAt <= item.StartAt)
+            return BadRequest(new { message = "End time must be after start time." });
+
         await db.SaveChangesAsync();
         return Ok(ToDto(item));
     }
@@ -121,6 +137,7 @@ public class ItemsController(AppDbContext db) : ControllerBase
         ToSnakeCase(i.Type.ToString()),
         i.Title, i.Content, i.FolderId, i.Color, i.Tags,
         i.DueDate, i.EventDate,
+        i.StartAt, i.EndAt,
         i.PosX, i.PosY, i.Width, i.Height,
         i.Priority, i.Completed, i.Pinned, i.Archived,
         i.CreatedAt, i.UpdatedAt

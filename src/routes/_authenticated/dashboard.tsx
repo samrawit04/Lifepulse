@@ -8,7 +8,9 @@ import {
   Pin,
   ArrowUpRight,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useItems } from "@/hooks/use-lifeos";
+import { deriveDefaultName, useUserProfile } from "@/hooks/use-user-profile";
 import { noteColorCss } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +20,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { data: items = [] } = useItems();
+  const { data: profile } = useUserProfile();
+  const now = useNow(60_000);
+  const firstName = (profile?.display_name?.trim() || deriveDefaultName(profile?.email)).split(" ")[0];
   const active = items.filter((i) => !i.archived);
   const today = startOfDay(new Date());
   const in7 = addDays(today, 7);
@@ -70,12 +75,18 @@ function Dashboard() {
       <header className="mb-6 sm:mb-10 flex flex-wrap items-end justify-between gap-4 sm:gap-6">
         <div>
           <p className="text-xs sm:text-sm font-medium tracking-wide text-muted-foreground">
-            {format(new Date(), "EEEE, MMMM d, yyyy")}
+            {format(now, "EEEE, MMMM d, yyyy")}
           </p>
 
-          <h1 className="mt-2 sm:mt-3 font-display text-xl sm:text-3xl lg:text-4xl font-semibold leading-tight text-foreground">
-            Good {greeting()}.
+          <h1 className="mt-2 sm:mt-3 font-display text-2xl sm:text-3xl lg:text-4xl font-semibold leading-tight text-foreground">
+            Good {greeting(now)}
+            {profile ? (
+              <>
+                , <span className="text-primary">{firstName}</span>
+              </>
+            ) : null}{" "}
           </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">{vibeLine(now, todayEvents.length, upcomingTasks.length)}</p>
         </div>
       </header>
 
@@ -260,12 +271,37 @@ function Dashboard() {
   );
 }
 
-function greeting() {
-  const h = new Date().getHours();
+function greeting(d: Date) {
+  const h = d.getHours();
   if (h < 5) return "night";
   if (h < 12) return "morning";
   if (h < 18) return "afternoon";
   return "evening";
+}
+
+function vibeLine(d: Date, events: number, tasks: number) {
+  const h = d.getHours();
+  if (events === 0 && tasks === 0) {
+    return h < 12
+      ? "A fresh, open day ahead. Make it yours."
+      : h < 18
+        ? "Nothing pressing — a great time to get ahead."
+        : "All clear. Time to slow down and recharge.";
+  }
+  const parts: string[] = [];
+  if (events > 0) parts.push(`${events} event${events > 1 ? "s" : ""} today`);
+  if (tasks > 0) parts.push(`${tasks} task${tasks > 1 ? "s" : ""} this week`);
+  return `On your plate: ${parts.join(" and ")}. You've got this.`;
+}
+
+/** Current time, refreshed on an interval so the greeting stays accurate. */
+function useNow(intervalMs: number) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
 }
 
 function relDate(iso: string) {

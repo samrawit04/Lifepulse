@@ -16,6 +16,9 @@ import {
   FolderIcon,
   CalendarOff,
   Pencil,
+  Pin,
+  PinOff,
+  AlarmClock,
 } from "lucide-react";
 import { useCreateItem, useDeleteItem, useFolders, useItems, useUpdateItem } from "@/hooks/use-lifeos";
 import { PRIORITIES, type Item, type ItemUpdate } from "@/lib/lifeos-types";
@@ -54,6 +57,9 @@ function TasksPage() {
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<string>("medium");
   const [folderId, setFolderId] = useState<string>("none");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [pinned, setPinned] = useState(false);
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [targetColumn, setTargetColumn] = useState<ColumnId>("backlog");
@@ -66,17 +72,22 @@ function TasksPage() {
   const [editDue, setEditDue] = useState("");
   const [editPriority, setEditPriority] = useState<string>("medium");
   const [editFolderId, setEditFolderId] = useState<string>("none");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
+  const [editPinned, setEditPinned] = useState(false);
 
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [activeDropTarget, setActiveDropTarget] = useState<ColumnId | null>(null);
 
   const tasks = useMemo(() => items.filter((i) => i.type === "task" && !i.archived), [items]);
 
+  // Pinned (urgent) tasks always surface at the top of the first list.
   const backlogTasks = useMemo(
     () =>
       tasks
         .filter((t) => {
           if (t.completed) return false;
+          if (t.pinned) return true;
           if (!t.due_date) return true;
           const due = startOfDay(new Date(t.due_date));
           const today = startOfDay(new Date());
@@ -90,7 +101,7 @@ function TasksPage() {
     () =>
       tasks
         .filter((t) => {
-          if (t.completed || !t.due_date) return false;
+          if (t.completed || t.pinned || !t.due_date) return false;
           const due = startOfDay(new Date(t.due_date));
           const today = startOfDay(new Date());
           return isToday(new Date(t.due_date)) || isBefore(due, today);
@@ -98,6 +109,9 @@ function TasksPage() {
         .sort(sortByDue),
     [tasks]
   );
+
+  const pinnedTasks = useMemo(() => backlogTasks.filter((t) => t.pinned), [backlogTasks]);
+  const unpinnedBacklog = useMemo(() => backlogTasks.filter((t) => !t.pinned), [backlogTasks]);
 
   const doneTasks = useMemo(
     () => tasks.filter((t) => t.completed).sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)),
@@ -110,6 +124,9 @@ function TasksPage() {
     setDue(col === "today" ? format(new Date(), "yyyy-MM-dd") : "");
     setPriority("medium");
     setFolderId("none");
+    setStartTime("");
+    setEndTime("");
+    setPinned(false);
     setIsModalOpen(true);
   };
 
@@ -120,13 +137,26 @@ function TasksPage() {
     setEditDue(task.due_date ? format(new Date(task.due_date), "yyyy-MM-dd") : "");
     setEditPriority(task.priority || "medium");
     setEditFolderId(task.folder_id || "none");
+    setEditStartTime(task.start_at ? format(new Date(task.start_at), "HH:mm") : "");
+    setEditEndTime(task.end_at ? format(new Date(task.end_at), "HH:mm") : "");
+    setEditPinned(task.pinned);
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
+    const timeWindow = buildTimeWindow(due, startTime, endTime);
+    if ("error" in timeWindow) {
+      toast.error(timeWindow.error);
+      return;
+    }
+
     let targetDue: string | null = due ? new Date(due).toISOString() : null;
+    if (!targetDue && timeWindow.start_at) {
+      // A time was picked without a date → schedule it for today.
+      targetDue = new Date().toISOString();
+    }
     if (targetColumn === "today" && !due) {
       targetDue = new Date().toISOString();
     }
@@ -137,6 +167,9 @@ function TasksPage() {
         title: title.trim(),
         priority,
         due_date: targetDue,
+        start_at: timeWindow.start_at,
+        end_at: timeWindow.end_at,
+        pinned,
         folder_id: folderId !== "none" ? folderId : null,
         completed: false,
       },
@@ -150,6 +183,9 @@ function TasksPage() {
     setTitle("");
     setDue("");
     setFolderId("none");
+    setStartTime("");
+    setEndTime("");
+    setPinned(false);
     setIsModalOpen(false);
   };
 
@@ -157,11 +193,23 @@ function TasksPage() {
     e.preventDefault();
     if (!editingTask || !editTitle.trim()) return;
 
+    const timeWindow = buildTimeWindow(editDue, editStartTime, editEndTime);
+    if ("error" in timeWindow) {
+      toast.error(timeWindow.error);
+      return;
+    }
+
+    let dueIso: string | null = editDue ? new Date(editDue).toISOString() : null;
+    if (!dueIso && timeWindow.start_at) dueIso = new Date().toISOString();
+
     const patch: ItemUpdate = {
       title: editTitle.trim(),
       content: editContent.trim() || null,
       priority: editPriority,
-      due_date: editDue ? new Date(editDue).toISOString() : null,
+      due_date: dueIso,
+      start_at: timeWindow.start_at,
+      end_at: timeWindow.end_at,
+      pinned: editPinned,
       folder_id: editFolderId !== "none" ? editFolderId : null,
     };
 
@@ -214,17 +262,20 @@ function TasksPage() {
     if (columnId === "done") {
       update.mutate({ id: itemId, patch: { completed: true } });
     } else if (columnId === "today") {
-      update.mutate({
-        id: itemId,
-        patch: { completed: false, due_date: new Date().toISOString() },
-      });
+      update.mutate({ id: itemId, patch: moveToTodayPatch(targetItem) });
     } else if (columnId === "backlog") {
       update.mutate({
         id: itemId,
-        patch: { completed: false, due_date: null },
+        patch: { completed: false, due_date: null, start_at: null, end_at: null },
       });
     }
   };
+
+  const togglePin = (t: Item) =>
+    update.mutate(
+      { id: t.id, patch: { pinned: !t.pinned } },
+      { onSuccess: () => toast.success(t.pinned ? "Task unpinned" : "Pinned to the top") }
+    );
 
   return (
     <div className="flex flex-col h-[calc(100dvh-48px)] lg:h-dvh overflow-hidden">
@@ -296,7 +347,8 @@ function TasksPage() {
               onDelete={(t) => setConfirmDeleteId(t.id)}
               onArchive={(t) => update.mutate({ id: t.id, patch: { archived: true } })}
               onEdit={openEditModal}
-              onMoveToToday={(t) => update.mutate({ id: t.id, patch: { completed: false, due_date: new Date().toISOString() } })}
+              onTogglePin={togglePin}
+              onMoveToToday={(t) => update.mutate({ id: t.id, patch: moveToTodayPatch(t) })}
               onAddTask={() => openModal("backlog")}
             />
 
@@ -316,7 +368,8 @@ function TasksPage() {
               onDelete={(t) => setConfirmDeleteId(t.id)}
               onArchive={(t) => update.mutate({ id: t.id, patch: { archived: true } })}
               onEdit={openEditModal}
-              onMoveToBacklog={(t) => update.mutate({ id: t.id, patch: { completed: false, due_date: null } })}
+              onTogglePin={togglePin}
+              onMoveToBacklog={(t) => update.mutate({ id: t.id, patch: { completed: false, due_date: null, start_at: null, end_at: null } })}
               onAddTask={() => openModal("today")}
             />
 
@@ -336,6 +389,7 @@ function TasksPage() {
               onDelete={(t) => setConfirmDeleteId(t.id)}
               onArchive={(t) => update.mutate({ id: t.id, patch: { archived: true } })}
               onEdit={openEditModal}
+              onTogglePin={togglePin}
             />
           </div>
         ) : (
@@ -343,6 +397,30 @@ function TasksPage() {
             {backlogTasks.length === 0 && todayTasks.length === 0 && doneTasks.length === 0 && (
               <div className="rounded-2xl border bg-card p-10 text-center text-muted-foreground">
                 A quiet list. Add your first task above.
+              </div>
+            )}
+
+            {pinnedTasks.length > 0 && (
+              <div>
+                <h2 className="mb-2 text-sm font-semibold text-amber-500 flex items-center gap-1.5">
+                  <Pin className="h-4 w-4" /> Pinned · Urgent ({pinnedTasks.length})
+                </h2>
+                <div className="space-y-2">
+                  {pinnedTasks.map((t) => (
+                    <TaskCard
+                      key={t.id}
+                      task={t}
+                      folders={folders}
+                      isDragging={draggedItemId === t.id}
+                      onDragStart={handleDragStart}
+                      onToggle={() => update.mutate({ id: t.id, patch: { completed: !t.completed } })}
+                      onDelete={() => setConfirmDeleteId(t.id)}
+                      onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
+                      onEdit={() => openEditModal(t)}
+                      onTogglePin={() => togglePin(t)}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -363,19 +441,20 @@ function TasksPage() {
                       onDelete={() => setConfirmDeleteId(t.id)}
                       onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
                       onEdit={() => openEditModal(t)}
+                      onTogglePin={() => togglePin(t)}
                     />
                   ))}
                 </div>
               </div>
             )}
 
-            {backlogTasks.length > 0 && (
+            {unpinnedBacklog.length > 0 && (
               <div>
                 <h2 className="mb-2 text-sm font-semibold text-lagoon flex items-center gap-1.5">
-                  <Clock className="h-4 w-4" /> Backlog ({backlogTasks.length})
+                  <Clock className="h-4 w-4" /> Backlog ({unpinnedBacklog.length})
                 </h2>
                 <div className="space-y-2">
-                  {backlogTasks.map((t) => (
+                  {unpinnedBacklog.map((t) => (
                     <TaskCard
                       key={t.id}
                       task={t}
@@ -386,6 +465,7 @@ function TasksPage() {
                       onDelete={() => setConfirmDeleteId(t.id)}
                       onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
                       onEdit={() => openEditModal(t)}
+                      onTogglePin={() => togglePin(t)}
                     />
                   ))}
                 </div>
@@ -409,6 +489,7 @@ function TasksPage() {
                       onDelete={() => setConfirmDeleteId(t.id)}
                       onArchive={() => update.mutate({ id: t.id, patch: { archived: true } })}
                       onEdit={() => openEditModal(t)}
+                      onTogglePin={() => togglePin(t)}
                     />
                   ))}
                 </div>
@@ -464,6 +545,16 @@ function TasksPage() {
                   </Select>
                 </div>
               </div>
+
+              <TimeWindowFields
+                idPrefix="task"
+                start={startTime}
+                end={endTime}
+                onStartChange={setStartTime}
+                onEndChange={setEndTime}
+              />
+
+              <PinToggle checked={pinned} onChange={setPinned} />
 
               {folders.length > 0 && (
                 <div className="space-y-1.5">
@@ -553,6 +644,16 @@ function TasksPage() {
                 </div>
               </div>
 
+              <TimeWindowFields
+                idPrefix="edit-task"
+                start={editStartTime}
+                end={editEndTime}
+                onStartChange={setEditStartTime}
+                onEndChange={setEditEndTime}
+              />
+
+              <PinToggle checked={editPinned} onChange={setEditPinned} />
+
               {folders.length > 0 && (
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-task-folder" className="text-xs font-semibold text-foreground">Folder / Project</Label>
@@ -616,6 +717,7 @@ interface KanbanColumnProps {
   onDelete: (task: Item) => void;
   onArchive: (task: Item) => void;
   onEdit: (task: Item) => void;
+  onTogglePin: (task: Item) => void;
   onMoveToToday?: (task: Item) => void;
   onMoveToBacklog?: (task: Item) => void;
   onAddTask?: () => void;
@@ -637,6 +739,7 @@ function KanbanColumn({
   onDelete,
   onArchive,
   onEdit,
+  onTogglePin,
   onMoveToToday,
   onMoveToBacklog,
   onAddTask,
@@ -694,6 +797,7 @@ function KanbanColumn({
               onDelete={() => onDelete(task)}
               onArchive={() => onArchive(task)}
               onEdit={() => onEdit(task)}
+              onTogglePin={() => onTogglePin(task)}
               onMoveToToday={onMoveToToday ? () => onMoveToToday(task) : undefined}
               onMoveToBacklog={onMoveToBacklog ? () => onMoveToBacklog(task) : undefined}
             />
@@ -713,6 +817,7 @@ interface TaskCardProps {
   onDelete: () => void;
   onArchive: () => void;
   onEdit: () => void;
+  onTogglePin: () => void;
   onMoveToToday?: () => void;
   onMoveToBacklog?: () => void;
 }
@@ -726,6 +831,7 @@ function TaskCard({
   onDelete,
   onArchive,
   onEdit,
+  onTogglePin,
   onMoveToToday,
   onMoveToBacklog,
 }: TaskCardProps) {
@@ -742,6 +848,7 @@ function TaskCard({
       className={cn(
         "group relative flex items-start gap-2 rounded-xl border bg-card p-2.5 sm:p-3 shadow-soft transition hover:shadow-md cursor-grab active:cursor-grabbing select-none",
         task.completed && "opacity-60 bg-muted/30",
+        task.pinned && !task.completed && "border-amber-400/50 bg-amber-400/[0.06] ring-1 ring-amber-400/20",
         isDragging && "opacity-40 border-dashed border-primary"
       )}
     >
@@ -763,6 +870,12 @@ function TaskCard({
         )}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+          {task.pinned && !task.completed && (
+            <span className="flex items-center gap-1 rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              <Pin className="h-2.5 w-2.5 fill-current" /> Pinned
+            </span>
+          )}
+
           {task.priority && (
             <span
               className={cn(
@@ -797,10 +910,32 @@ function TaskCard({
               {isToday(new Date(task.due_date)) ? "Today" : format(new Date(task.due_date), "MMM d")}
             </span>
           )}
+
+          {task.start_at && (
+            <span className="flex items-center gap-1 rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-medium text-sky-700 dark:text-sky-300">
+              <AlarmClock className="h-2.5 w-2.5" />
+              {format(new Date(task.start_at), "HH:mm")}
+              {task.end_at && ` – ${format(new Date(task.end_at), "HH:mm")}`}
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center opacity-0 transition-opacity group-hover:opacity-100 shrink-0 gap-0.5">
+      <div className="flex items-center opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 shrink-0 gap-0.5">
+        {!task.completed && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
+            className={cn(
+              "rounded p-1 transition",
+              task.pinned
+                ? "text-amber-500 hover:bg-amber-500/10"
+                : "text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500"
+            )}
+            title={task.pinned ? "Unpin task" : "Pin as urgent (show first)"}
+          >
+            {task.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+          </button>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
           className="rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary transition"
@@ -846,8 +981,123 @@ function TaskCard({
 }
 
 function sortByDue(a: Item, b: Item) {
-  if (!a.due_date && !b.due_date) return 0;
-  if (!a.due_date) return 1;
-  if (!b.due_date) return -1;
-  return a.due_date < b.due_date ? -1 : 1;
+  // Pinned (urgent) tasks always come first.
+  if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+  const aKey = a.start_at ?? a.due_date;
+  const bKey = b.start_at ?? b.due_date;
+  if (!aKey && !bKey) return 0;
+  if (!aKey) return 1;
+  if (!bKey) return -1;
+  return aKey < bKey ? -1 : 1;
+}
+
+/** Move a task to today, keeping its time-of-day window (if any). */
+function moveToTodayPatch(t: Item): ItemUpdate {
+  const shift = (iso: string | null) => {
+    if (!iso) return null;
+    const src = new Date(iso);
+    const d = new Date();
+    d.setHours(src.getHours(), src.getMinutes(), 0, 0);
+    return d.toISOString();
+  };
+  return {
+    completed: false,
+    due_date: new Date().toISOString(),
+    start_at: shift(t.start_at),
+    end_at: shift(t.end_at),
+  };
+}
+
+/**
+ * Combine a yyyy-MM-dd date (or today) with HH:mm start / end times.
+ * Returns ISO timestamps, or an error message when the window is invalid.
+ */
+function buildTimeWindow(
+  date: string,
+  start: string,
+  end: string
+): { start_at: string | null; end_at: string | null } | { error: string } {
+  if (!start && !end) return { start_at: null, end_at: null };
+  if (!start && end) return { error: "Please add a start time too." };
+
+  const day = date ? date : format(new Date(), "yyyy-MM-dd");
+  const startDate = new Date(`${day}T${start}`);
+  if (Number.isNaN(startDate.getTime())) return { error: "Invalid start time." };
+
+  if (!end) return { start_at: startDate.toISOString(), end_at: null };
+
+  const endDate = new Date(`${day}T${end}`);
+  if (Number.isNaN(endDate.getTime())) return { error: "Invalid end time." };
+  if (endDate <= startDate) return { error: "End time must be after the start time." };
+
+  return { start_at: startDate.toISOString(), end_at: endDate.toISOString() };
+}
+
+function TimeWindowFields({
+  idPrefix,
+  start,
+  end,
+  onStartChange,
+  onEndChange,
+}: {
+  idPrefix: string;
+  start: string;
+  end: string;
+  onStartChange: (v: string) => void;
+  onEndChange: (v: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-start`} className="text-xs font-semibold text-foreground">Start time</Label>
+        <Input
+          id={`${idPrefix}-start`}
+          type="time"
+          value={start}
+          onChange={(e) => onStartChange(e.target.value)}
+          className="border-input bg-background text-foreground text-xs h-9 rounded-xl"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-end`} className="text-xs font-semibold text-foreground">End time</Label>
+        <Input
+          id={`${idPrefix}-end`}
+          type="time"
+          value={end}
+          min={start || undefined}
+          onChange={(e) => onEndChange(e.target.value)}
+          className="border-input bg-background text-foreground text-xs h-9 rounded-xl"
+        />
+      </div>
+      {(start || end) && (
+        <button
+          type="button"
+          onClick={() => { onStartChange(""); onEndChange(""); }}
+          className="col-span-2 -mt-1 justify-self-start text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          Clear times
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PinToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition",
+        checked ? "border-amber-400/50 bg-amber-400/10" : "border-input bg-background hover:bg-accent/30"
+      )}
+    >
+      <Checkbox checked={checked} onCheckedChange={(v) => onChange(v === true)} className="h-4 w-4" />
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+          <Pin className={cn("h-3.5 w-3.5", checked ? "text-amber-500 fill-amber-500" : "text-muted-foreground")} />
+          Pin as urgent
+        </p>
+        <p className="text-[11px] text-muted-foreground">Keeps this task at the top of the first list.</p>
+      </div>
+    </label>
+  );
 }

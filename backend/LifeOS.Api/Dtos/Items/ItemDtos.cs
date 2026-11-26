@@ -13,6 +13,8 @@ public record ItemDto(
     string[] Tags,
     DateTime? DueDate,
     DateTime? EventDate,
+    DateTime? StartAt,
+    DateTime? EndAt,
     double? PosX,
     double? PosY,
     double? Width,
@@ -34,11 +36,15 @@ public record CreateItemRequest(
     string[]? Tags,
     DateTime? DueDate,
     DateTime? EventDate,
+    DateTime? StartAt,
+    DateTime? EndAt,
     double? PosX,
     double? PosY,
     double? Width,
     double? Height,
-    string? Priority
+    string? Priority,
+    bool? Pinned,
+    bool? Completed
 );
 
 // All fields nullable — only non-null fields are patched (partial update)
@@ -53,6 +59,10 @@ public record UpdateItemRequest(
     bool? ClearDueDate,
     DateTime? EventDate,
     bool? ClearEventDate,
+    DateTime? StartAt,
+    bool? ClearStartAt,
+    DateTime? EndAt,
+    bool? ClearEndAt,
     double? PosX,
     double? PosY,
     double? Width,
