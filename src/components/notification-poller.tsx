@@ -11,9 +11,9 @@ import { useNotificationPoller } from "@/lib/notification-context";
 const NO_BUDGETS: Record<string, number> = {};
 
 export function NotificationPoller() {
-  const { data: items = [] } = useItems();
-  const { data: expenses = [] } = useExpenses();
-  const { data: budgetData } = useCategoryBudgets();
+  const { data: items = [], isSuccess: itemsReady } = useItems();
+  const { data: expenses = [], isSuccess: expensesReady } = useExpenses();
+  const { data: budgetData, isFetched: budgetsFetched } = useCategoryBudgets();
 
   const categoryBudgets = useMemo(() => {
     const raw = budgetData ?? NO_BUDGETS;
@@ -26,7 +26,13 @@ export function NotificationPoller() {
     [categoryBudgets]
   );
 
-  useNotificationPoller({ items, expenses, categoryBudgets, monthlyBudget });
+  useNotificationPoller({
+    items,
+    expenses,
+    categoryBudgets,
+    monthlyBudget,
+    ready: itemsReady && expensesReady && budgetsFetched,
+  });
 
   return null; // renders nothing, just fires effects
 }

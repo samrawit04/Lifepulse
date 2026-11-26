@@ -32,6 +32,20 @@ public class NotificationsController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<NotificationDto>> Create([FromBody] CreateNotificationRequest req)
     {
         var userId = TokenService.GetUserId(User);
+
+        // Safety net against duplicates (e.g. two open tabs firing the same
+        // reminder at once): reuse an identical notification from the last 12 hours.
+        var since = DateTime.UtcNow.AddHours(-12);
+        var existing = await db.Notifications
+            .Where(n => n.UserId == userId
+                        && n.Category == req.Category
+                        && n.Title == req.Title
+                        && n.Body == req.Body
+                        && n.CreatedAt >= since)
+            .OrderByDescending(n => n.CreatedAt)
+            .FirstOrDefaultAsync();
+        if (existing is not null) return Ok(ToDto(existing));
+
         var notification = new Notification
         {
             UserId = userId,
