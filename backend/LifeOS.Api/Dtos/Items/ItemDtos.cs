@@ -8,6 +8,7 @@ public record ItemDto(
     string Type,          // lowercase string to match frontend: "sticky", "notebook_page", "task", "event"
     string? Title,
     string? Content,
+    Guid? ParentId,
     Guid? FolderId,
     string? Color,
     string[] Tags,
@@ -31,6 +32,7 @@ public record CreateItemRequest(
     string Type,          // "sticky" | "notebook_page" | "task" | "event"
     string? Title,
     string? Content,
+    Guid? ParentId,
     Guid? FolderId,
     string? Color,
     string[]? Tags,
@@ -51,6 +53,8 @@ public record CreateItemRequest(
 public record UpdateItemRequest(
     string? Title,
     string? Content,
+    Guid? ParentId,
+    bool? ClearParentId,
     Guid? FolderId,
     bool? ClearFolderId,   // set to true to explicitly set FolderId = null
     string? Color,

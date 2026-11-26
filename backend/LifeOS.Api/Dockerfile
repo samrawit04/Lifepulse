@@ -14,6 +14,12 @@ RUN dotnet publish LifeOS.Api.csproj -c Release -o /app/publish --no-restore
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Npgsql probes for Kerberos (GSSAPI) support at startup; install the library so
+# it doesn't log "Cannot load library libgssapi_krb5.so.2".
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/publish ./
 
 # Render injects PORT env var; ASP.NET Core respects ASPNETCORE_URLS

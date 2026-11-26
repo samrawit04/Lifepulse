@@ -169,6 +169,9 @@ namespace LifeOS.Api.Migrations
                     b.Property<double?>("Height")
                         .HasColumnType("double precision");
 
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("Pinned")
                         .HasColumnType("boolean");
 
@@ -209,6 +212,8 @@ namespace LifeOS.Api.Migrations
                     b.HasIndex("Archived");
 
                     b.HasIndex("FolderId");
+
+                    b.HasIndex("ParentId");
 
                     b.HasIndex("Type");
 
@@ -501,6 +506,11 @@ namespace LifeOS.Api.Migrations
                         .HasForeignKey("FolderId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("LifeOS.Api.Models.Item", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("LifeOS.Api.Models.User", "User")
                         .WithMany("Items")
                         .HasForeignKey("UserId")
@@ -508,6 +518,8 @@ namespace LifeOS.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Folder");
+
+                    b.Navigation("Parent");
 
                     b.Navigation("User");
                 });

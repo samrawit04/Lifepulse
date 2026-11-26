@@ -64,6 +64,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .HasForeignKey(i => i.FolderId)
              .OnDelete(DeleteBehavior.SetNull);
 
+            // Sub-tasks are deleted together with their parent task
+            e.HasOne(i => i.Parent)
+             .WithMany()
+             .HasForeignKey(i => i.ParentId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(i => i.ParentId);
+
             // Store ItemType enum as string in DB
             e.Property(i => i.Type)
              .HasConversion<string>();
