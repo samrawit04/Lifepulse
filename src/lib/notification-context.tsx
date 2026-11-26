@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, type AppNotification } from "@/integrations/api/client";
+import { useUserSetting } from "@/hooks/use-user-setting";
 
 export type NotifCategory = "calendar" | "task" | "expense" | "general";
 
@@ -143,39 +144,28 @@ export function useNotifications() {
   return ctx;
 }
 
-// ─── Date helpers for notification deduplication ──────────────────────────────
-function isDateToday(dateStr: string): boolean {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return false;
-    const now = new Date();
-    return (
-      d.getDate() === now.getDate() &&
-      d.getMonth() === now.getMonth() &&
-      d.getFullYear() === now.getFullYear()
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isDateSameMonth(dateStr: string): boolean {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return false;
-    const now = new Date();
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  } catch {
-    return false;
-  }
-}
-
 // ─── Smart poller: generates notifications from live data ────────────────────
+//
+// Each reminder has a stable key (e.g. "tasks-due-today:2026-11-26"). Keys that
+// have already fired are stored on the server (user setting "notification-log"),
+// so a reminder is sent once per day/month — even after a page reload, on
+// another device, or after the notification itself was dismissed.
+
 interface SmartPollerProps {
   items: import("@/lib/lifeos-types").Item[];
   expenses: import("@/lib/lifeos-types").Expense[];
   categoryBudgets: Record<string, number>;
   monthlyBudget: number;
+  /** True once items/expenses/budgets have loaded, so we never act on empty data. */
+  ready?: boolean;
+}
+
+const NOTIF_LOG_KEY = "notification-log";
+const EMPTY_LOG: string[] = [];
+
+function localDay(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export function useNotificationPoller({
@@ -183,149 +173,115 @@ export function useNotificationPoller({
   expenses,
   categoryBudgets,
   monthlyBudget,
+  ready = true,
 }: SmartPollerProps) {
-  const { notifications, add } = useNotifications();
-  // Track which dedup keys we've already fired this session to avoid duplicate DB writes
+  const { isLoading: notificationsLoading, add } = useNotifications();
+  const { value: firedLog, isLoading: logLoading, save: saveLog } = useUserSetting<string[]>(NOTIF_LOG_KEY, EMPTY_LOG);
+  // Keys fired in this session (covers the moment before the server log refreshes)
   const firedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!items.length && !expenses.length) return;
+    // Wait until everything has loaded — acting on half-loaded data is what caused repeats.
+    if (!ready || notificationsLoading || logLoading) return;
 
     const now = new Date();
+    const today = localDay(now);
+    const month = today.slice(0, 7);
+    const already = new Set([...firedLog, ...firedRef.current]);
+    const newKeys: string[] = [];
+
+    const fire = (key: string, n: Parameters<typeof add>[0]) => {
+      if (already.has(key)) return;
+      already.add(key);
+      firedRef.current.add(key);
+      newKeys.push(key);
+      add(n);
+    };
 
     // ── 1. Calendar events starting within 60 minutes ──────────────────────
-    const upcomingEvents = items.filter((i) => {
-      if (i.type !== "event" || !i.event_date || i.archived) return false;
-      const dt = new Date(i.event_date);
-      const diff = dt.getTime() - now.getTime();
-      return diff > 0 && diff <= 60 * 60 * 1000;
-    });
-    for (const ev of upcomingEvents) {
-      const key = `event-upcoming-${ev.id}-${now.toDateString()}`;
-      if (firedRef.current.has(key)) continue;
-      const alreadyNotified = notifications.some(
-        (n) => n.category === "calendar" && n.body.includes(ev.title || "Untitled") && isDateToday(n.createdAt)
-      );
-      if (alreadyNotified) {
-        firedRef.current.add(key);
-        continue;
-      }
-      firedRef.current.add(key);
-      const mins = Math.round((new Date(ev.event_date!).getTime() - now.getTime()) / 60000);
-      add({ category: "calendar", icon: "📅", title: "Event coming up", body: `${ev.title || "Untitled"} starts in ${mins} min`, link: "/calendar" });
+    for (const ev of items) {
+      if (ev.type !== "event" || !ev.event_date || ev.archived) continue;
+      const diff = new Date(ev.event_date).getTime() - now.getTime();
+      if (diff <= 0 || diff > 60 * 60 * 1000) continue;
+      const mins = Math.round(diff / 60000);
+      fire(`event:${ev.id}:${today}`, {
+        category: "calendar",
+        title: "Event coming up",
+        body: `${ev.title || "Untitled"} starts in ${mins} min`,
+        link: "/calendar",
+      });
     }
 
-    // Start of today (midnight) — tasks due before today are overdue
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const openTasks = items.filter((i) => i.type === "task" && !i.completed && !i.archived && i.due_date);
 
-    // ── 2. Overdue tasks (due strictly BEFORE today) ────────────────────────
-    const overdueTasks = items.filter((i) => {
-      if (i.type !== "task" || i.completed || i.archived || !i.due_date) return false;
-      const due = new Date(i.due_date);
-      return due < startOfToday;
-    });
-
-    if (overdueTasks.length > 0) {
-      const todayStr = now.toDateString();
-      const key = `tasks-overdue-${todayStr}`;
-
-      if (!firedRef.current.has(key)) {
-        firedRef.current.add(key);
-
-        const alreadyNotified = notifications.some(
-          (n) => n.category === "task" && n.title.includes("overdue") && isDateToday(n.createdAt)
-        );
-        if (!alreadyNotified) {
-          add({
-            category: "task",
-            icon: "⚠️",
-            title: `${overdueTasks.length} overdue task${overdueTasks.length > 1 ? "s" : ""}`,
-            body: overdueTasks.length === 1
-              ? `"${overdueTasks[0].title || "Untitled"}" is past due`
-              : `${overdueTasks.slice(0, 2).map((t) => t.title || "Untitled").join(", ")}${overdueTasks.length > 2 ? ` and ${overdueTasks.length - 2} more` : ""}`,
-            link: "/tasks",
-          });
-        }
-      }
+    // ── 2. Overdue tasks (due before today) — once per day ──────────────────
+    const overdue = openTasks.filter((t) => new Date(t.due_date!) < startOfToday);
+    if (overdue.length > 0) {
+      fire(`tasks-overdue:${today}`, {
+        category: "task",
+        title: `${overdue.length} overdue task${overdue.length > 1 ? "s" : ""}`,
+        body:
+          overdue.length === 1
+            ? `"${overdue[0].title || "Untitled"}" is past due`
+            : `${overdue.slice(0, 2).map((t) => t.title || "Untitled").join(", ")}${overdue.length > 2 ? ` and ${overdue.length - 2} more` : ""}`,
+        link: "/tasks",
+      });
     }
 
-    // ── 3. Tasks due today ─────────────────────────────────────────────────
-    const dueTodayTasks = items.filter((i) => {
-      if (i.type !== "task" || !i.due_date || i.completed || i.archived) return false;
-      const due = new Date(i.due_date);
-      return due.toDateString() === now.toDateString();
-    });
-
-    if (dueTodayTasks.length > 0) {
-      const todayStr = now.toDateString();
-      const key = `tasks-due-today-${todayStr}`;
-
-      if (!firedRef.current.has(key)) {
-        firedRef.current.add(key);
-
-        const alreadyNotified = notifications.some(
-          (n) => n.category === "task" && n.title.includes("due today") && isDateToday(n.createdAt)
-        );
-        if (!alreadyNotified) {
-          add({
-            category: "task",
-            icon: "✅",
-            title: `${dueTodayTasks.length} task${dueTodayTasks.length > 1 ? "s" : ""} due today`,
-            body: dueTodayTasks.slice(0, 2).map((t) => t.title || "Untitled").join(", ") + (dueTodayTasks.length > 2 ? "…" : ""),
-            link: "/tasks",
-          });
-        }
-      }
+    // ── 3. Tasks due today — once per day ───────────────────────────────────
+    const dueToday = openTasks.filter((t) => new Date(t.due_date!).toDateString() === now.toDateString());
+    if (dueToday.length > 0) {
+      fire(`tasks-due-today:${today}`, {
+        category: "task",
+        title: `${dueToday.length} task${dueToday.length > 1 ? "s" : ""} due today`,
+        body: dueToday.slice(0, 2).map((t) => t.title || "Untitled").join(", ") + (dueToday.length > 2 ? "…" : ""),
+        link: "/tasks",
+      });
     }
 
-    // ── 4. Monthly budget warnings ─────────────────────────────────────────
-    if (monthlyBudget > 0 && expenses.length > 0) {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const thisMonthTotal = expenses.filter((e) => new Date(e.occurred_at) >= monthStart).reduce((s, e) => s + Number(e.amount), 0);
-      const pct = (thisMonthTotal / monthlyBudget) * 100;
+    // ── 4. Monthly budget warnings — once per month ─────────────────────────
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthExpenses = expenses.filter((e) => new Date(e.occurred_at) >= monthStart);
+    if (monthlyBudget > 0) {
+      const total = monthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+      const pct = (total / monthlyBudget) * 100;
       if (pct >= 100) {
-        const key = `expense-over-budget-${now.getMonth()}-${now.getFullYear()}`;
-        if (!firedRef.current.has(key)) {
-          firedRef.current.add(key);
-          const alreadyNotified = notifications.some(
-            (n) => n.category === "expense" && n.title.includes("Monthly budget exceeded") && isDateSameMonth(n.createdAt)
-          );
-          if (!alreadyNotified) {
-            add({ category: "expense", icon: "🚨", title: "Monthly budget exceeded!", body: `You've spent ${Math.round(pct)}% of your ${monthlyBudget.toLocaleString()} Birr budget this month`, link: "/expenses" });
-          }
-        }
+        fire(`budget-100:${month}`, {
+          category: "expense",
+          title: "Monthly budget exceeded",
+          body: `You've spent ${Math.round(pct)}% of your ${monthlyBudget.toLocaleString()} Birr budget this month`,
+          link: "/expenses",
+        });
       } else if (pct >= 80) {
-        const key = `expense-budget-80-${now.getMonth()}-${now.getFullYear()}`;
-        if (!firedRef.current.has(key)) {
-          firedRef.current.add(key);
-          const alreadyNotified = notifications.some(
-            (n) => n.category === "expense" && n.title.includes("Budget at 80%") && isDateSameMonth(n.createdAt)
-          );
-          if (!alreadyNotified) {
-            add({ category: "expense", icon: "💰", title: "Budget at 80%", body: `You've used ${Math.round(pct)}% of your monthly budget (${thisMonthTotal.toLocaleString()} / ${monthlyBudget.toLocaleString()} Birr)`, link: "/expenses" });
-          }
-        }
+        fire(`budget-80:${month}`, {
+          category: "expense",
+          title: "Budget at 80%",
+          body: `You've used ${Math.round(pct)}% of your monthly budget (${total.toLocaleString()} / ${monthlyBudget.toLocaleString()} Birr)`,
+          link: "/expenses",
+        });
       }
     }
 
-    // ── 5. Per-category budget warnings ───────────────────────────────────
-    const monthStart2 = new Date(now.getFullYear(), now.getMonth(), 1);
+    // ── 5. Per-category budget warnings — once per category per month ──────
     for (const [cat, budget] of Object.entries(categoryBudgets)) {
       if (!budget) continue;
-      const spent = expenses.filter((e) => e.category === cat && new Date(e.occurred_at) >= monthStart2).reduce((s, e) => s + Number(e.amount), 0);
+      const spent = monthExpenses.filter((e) => e.category === cat).reduce((s, e) => s + Number(e.amount), 0);
       const pct = (spent / budget) * 100;
       if (pct >= 90) {
-        const key = `expense-cat-${cat}-${now.getMonth()}-${now.getFullYear()}`;
-        if (!firedRef.current.has(key)) {
-          firedRef.current.add(key);
-          const alreadyNotified = notifications.some(
-            (n) => n.category === "expense" && n.title.includes(`${cat} budget`) && isDateSameMonth(n.createdAt)
-          );
-          if (!alreadyNotified) {
-            add({ category: "expense", icon: "💸", title: `${cat} budget ${pct >= 100 ? "exceeded" : "almost full"}`, body: `Spent ${spent.toLocaleString()} of ${budget.toLocaleString()} Birr on ${cat} this month`, link: "/expenses" });
-          }
-        }
+        fire(`cat:${cat}:${month}`, {
+          category: "expense",
+          title: `${cat} budget ${pct >= 100 ? "exceeded" : "almost full"}`,
+          body: `Spent ${spent.toLocaleString()} of ${budget.toLocaleString()} Birr on ${cat} this month`,
+          link: "/expenses",
+        });
       }
     }
-  }, [items, expenses, categoryBudgets, monthlyBudget, notifications, add]);
+
+    if (newKeys.length > 0) {
+      // Keep only this month's keys so the log stays small
+      const kept = firedLog.filter((k) => k.endsWith(today) || k.endsWith(month));
+      saveLog([...new Set([...kept, ...newKeys])]);
+    }
+  }, [items, expenses, categoryBudgets, monthlyBudget, ready, notificationsLoading, logLoading, firedLog, add, saveLog]);
 }
