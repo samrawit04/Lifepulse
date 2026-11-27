@@ -236,6 +236,11 @@ export async function askGemini(history: ChatMessage[], systemPrompt: string): P
         );
         continue;
       }
+      // 500/503 = Google's servers are busy or overloaded: try the next model instead of failing.
+      if (res.status >= 500 || errMsg.toLowerCase().includes("overloaded") || errMsg.includes("UNAVAILABLE")) {
+        lastError = new Error("Gemini is busy right now (Google's servers are overloaded). Please try again in a moment.");
+        continue;
+      }
       throw new Error(errMsg);
     }
 

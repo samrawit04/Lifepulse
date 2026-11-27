@@ -36,7 +36,7 @@ function Dashboard() {
     .filter((i) => i.type === "task" && !i.completed && i.due_date && isWithinInterval(new Date(i.due_date), { start: today, end: in7 }))
     .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1));
 
-  const pinnedNotes = active.filter((i) => i.type === "sticky" && i.pinned).slice(0, 4);
+  const pinnedNotes = active.filter((i) => i.type === "sticky" && i.pinned).slice(0, 6);
   const recentNotes = active.filter((i) => i.type === "sticky").slice(0, 6);
   const notebookPages = active.filter((i) => i.type === "notebook_page").slice(0, 4);
 
@@ -246,22 +246,22 @@ function Dashboard() {
             actionText="Open sticky board"
           />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {(pinnedNotes.length > 0 ? pinnedNotes : recentNotes).map((n, i) => (
               <Link
                 key={n.id}
                 to="/sticky"
-                className="group relative aspect-square rounded-2xl p-4 shadow-note transition-all duration-300 hover:-translate-y-1.5 hover:rotate-0 hover:shadow-xl cursor-pointer block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="group relative h-28 overflow-hidden rounded-xl p-3 shadow-note sm:h-32 transition-all duration-300 hover:-translate-y-1.5 hover:rotate-0 hover:shadow-xl cursor-pointer block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 style={{
                   background: `linear-gradient(160deg, ${noteColorCss(n.color)}, color-mix(in oklab, ${noteColorCss(n.color)} 70%, black))`,
-                  transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (1 + (i % 3))}deg)`,
+                  transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (0.5 + (i % 3) * 0.5)}deg)`,
                 }}
               >
-                {n.pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-black/50" />}
-                {n.title && <p className="font-display text-lg text-black/85 group-hover:text-black transition-colors">{n.title}</p>}
-                <p className="mt-1 line-clamp-6 whitespace-pre-wrap text-sm text-black/75">{n.content}</p>
-                <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <ArrowUpRight className="h-4 w-4 text-black/60" />
+                {n.pinned && <Pin className="absolute right-2 top-2 h-3 w-3 text-black/50" />}
+                {n.title && <p className="truncate pr-4 font-display text-sm font-semibold text-black/85 group-hover:text-black transition-colors">{n.title}</p>}
+                <p className={cn("whitespace-pre-wrap pr-3 text-xs leading-snug text-black/75", n.title ? "mt-0.5 line-clamp-4" : "line-clamp-5")}>{n.content || "Empty note"}</p>
+                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <ArrowUpRight className="h-3.5 w-3.5 text-black/60" />
                 </div>
               </Link>
             ))}

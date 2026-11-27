@@ -67,59 +67,6 @@ function toVideoInfo(id: string, snippet: any): VideoInfo {
   };
 }
 
-async function fetchTrendingMusic(apiKey: string): Promise<VideoInfo[]> {
-  const base = `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&maxResults=12&key=${apiKey}`;
-  const region = regionFromLocale();
-  // Not every region has a music chart — fall back to the global one.
-  for (const url of region ? [`${base}&regionCode=${region}`, base] : [base]) {
-    const res = await fetch(url);
-    if (!res.ok) continue;
-    const data = await res.json();
-    if (Array.isArray(data.items) && data.items.length > 0) {
-      return data.items.map((it: any) => toVideoInfo(it.id, it.snippet));
-    }
-  }
-  return [];
-}
-
-async function searchMusic(apiKey: string, q: string, max = 8): Promise<VideoInfo[]> {
-  const res = await fetch(
-    `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=${max}&q=${encodeURIComponent(q)}&key=${apiKey}`
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.items ?? [])
-    .filter((it: any) => it?.id?.videoId)
-    .map((it: any) => toVideoInfo(it.id.videoId, it.snippet));
-}
-
-async function fetchRecommendations(apiKey: string, seeds: string[], exclude: string[]): Promise<Recommendation[]> {
-  const [trending, ...seeded] = await Promise.all([
-    fetchTrendingMusic(apiKey).catch(() => [] as VideoInfo[]),
-    ...seeds.map((seed) => searchMusic(apiKey, seed).catch(() => [] as VideoInfo[])),
-  ]);
-
-  const lists: Recommendation[][] = [
-    ...seeded.map((list, i) => list.map((v) => ({ ...v, reason: `Because you like ${seeds[i]}` }))),
-    trending.map((v) => ({ ...v, reason: "Trending in music" })),
-  ];
-
-  // Interleave the lists so the feed mixes personal picks and trending tracks
-  const seen = new Set(exclude);
-  const out: Recommendation[] = [];
-  const longest = Math.max(0, ...lists.map((l) => l.length));
-  for (let i = 0; i < longest && out.length < 18; i++) {
-    for (const list of lists) {
-      const v = list[i];
-      if (v && !seen.has(v.videoId)) {
-        seen.add(v.videoId);
-        out.push(v);
-      }
-    }
-  }
-  return out;
-}
-
 // ─── Add-to-playlist portal popover ──────────────────────────────────────────
 function AddToPlaylistButton({
   video,
@@ -300,32 +247,6 @@ function MusicPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const youtubeApiKey = import.meta.env.VITE_YOUTUBE_API_KEY || "";
-
-  // Seeds for "Picked for you": artists from your playlist, then what's playing
-  const recommendationSeeds = useMemo(() => {
-    const channels: string[] = [];
-    const sorted = [...playlistItems].sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
-    for (const item of sorted) {
-      const ch = item.channelName?.trim();
-      if (ch && !channels.includes(ch)) channels.push(ch);
-      if (channels.length >= 2) break;
-    }
-    if (channels.length < 2 && currentVideo?.channelName && !channels.includes(currentVideo.channelName)) {
-      channels.push(currentVideo.channelName);
-    }
-    return channels.slice(0, 2);
-  }, [playlistItems, currentVideo?.channelName]);
-
-  const excludeIds = useMemo(() => playlistItems.map((i) => i.videoId), [playlistItems]);
-
-  const recommendations = useQuery({
-    queryKey: ["music-recommendations", recommendationSeeds, excludeIds.length],
-    queryFn: () => fetchRecommendations(youtubeApiKey, recommendationSeeds, excludeIds),
-    enabled: Boolean(youtubeApiKey),
-    staleTime: 1000 * 60 * 30,
-    refetchOnWindowFocus: false,
-  });
-
 
   useEffect(() => { loadPlaylists(); }, []);
 
@@ -547,9 +468,9 @@ function MusicPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-cozy-grain text-foreground pb-12">
+    <div className="flex h-[calc(100dvh-48px)] flex-col overflow-hidden bg-cozy-grain text-foreground lg:h-dvh">
 
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-white/5 px-4 sm:px-6 py-3 sm:py-4 bg-background/40 backdrop-blur-md">
+      <header className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-white/5 px-4 sm:px-6 py-3 sm:py-4 bg-background/40 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3 w-full md:w-auto">
           <div className="flex items-center gap-3">
             <h1 className="font-display text-xl sm:text-3xl font-semibold text-foreground">Watch</h1>
@@ -605,7 +526,7 @@ function MusicPage() {
       </header>
 
       {!youtubeApiKey && (
-        <div className="mx-6 mt-4 flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-200">
+        <div className="mx-6 mt-4 shrink-0 flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-200">
           <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
           <p>
             YouTube API Key missing. Add <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300">VITE_YOUTUBE_API_KEY</code> to <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300">.env</code> to enable recommendations and live search.
@@ -614,14 +535,15 @@ function MusicPage() {
       )}
 
       {/* ── Main Layout ── */}
-      <main className="mx-auto max-w-[1600px] px-4 py-6 lg:px-8">
-        <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
+      {/* Header and tabs stay put; only the videos scroll (each column on its own on large screens) */}
+      <main className="mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-y-auto overscroll-contain px-4 lg:overflow-hidden lg:px-8">
+        <div className="grid gap-8 lg:h-full lg:grid-cols-[1fr_400px]">
 
           {/* LEFT: Tabbed Main Stage */}
-          <div className="space-y-4 min-w-0">
+          <div className="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
 
             {/* Tab Navigation */}
-            <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto scrollbar-none">
+            <div className="sticky top-0 z-10 -mx-4 flex shrink-0 items-center gap-2 overflow-x-auto border-b border-white/10 bg-background/85 px-4 pb-3 pt-4 backdrop-blur-md scrollbar-none lg:static lg:mx-0 lg:bg-transparent lg:px-0 lg:pt-6 lg:backdrop-blur-none">
               {(["foryou", "player", "search"] as const).map((tab) => (
                 <button
                   key={tab}
@@ -650,6 +572,7 @@ function MusicPage() {
               ))}
             </div>
 
+            <div className="space-y-4 pb-10 pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
             {/* ─────────────────────────────────────────────────
                 PLAYER TAB — always in DOM to keep iframe alive.
                 Hidden via CSS when another tab is active.
@@ -805,14 +728,6 @@ function MusicPage() {
                   renderActions={(video) => (
                     <AddToPlaylistButton video={video} playlists={playlists} onAdd={handleAddToPlaylist} />
                   )}
-                  pickedForYou={{
-                    videos: recommendations.data ?? [],
-                    loading: recommendations.isLoading,
-                    subtitle:
-                      recommendationSeeds.length > 0
-                        ? `Based on ${recommendationSeeds.join(" & ")} and what's trending`
-                        : "Trending music right now — save videos to a playlist to personalise this",
-                  }}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center glass-card rounded-2xl">
@@ -824,10 +739,11 @@ function MusicPage() {
                 </div>
               )
             )}
+            </div>
           </div>
 
           {/* RIGHT: Playlist Sidebar */}
-          <div className="space-y-4">
+          <div className="space-y-4 pb-10 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pt-6 lg:pr-1">
             {/* Playlist selector panel */}
             <div className="glass-card rounded-2xl p-5 shadow-xl">
               <div className="flex items-center justify-between mb-4">

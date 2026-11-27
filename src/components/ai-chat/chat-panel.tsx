@@ -19,6 +19,8 @@ import type { ChatConversation } from "@/integrations/api/client";
 
 interface ChatPanelProps {
   expanded: boolean;
+  /** Small screen: always full screen, no expand toggle. */
+  mobile?: boolean;
   conversations: ChatConversation[];
   conversationsLoading: boolean;
   activeId: string | null;
@@ -60,14 +62,14 @@ function Message({ msg }: { msg: ChatMessage }) {
       )}
       {msg.role === "user" ? (
         <div
-          className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-[0_4px_16px_rgba(21,128,61,0.35)]"
+          className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-[0_4px_16px_rgba(21,128,61,0.35)]"
           style={{ background: "linear-gradient(135deg, #15803d, #16a34a)" }}
         >
           {msg.text}
         </div>
       ) : (
         <div
-          className="chat-md max-w-[85%] rounded-2xl rounded-tl-sm border border-green-100 bg-white px-3.5 py-2.5 text-sm leading-relaxed text-slate-800 shadow-sm"
+          className="chat-md min-w-0 max-w-[85%] overflow-x-auto break-words rounded-2xl rounded-tl-sm border border-green-100 bg-white px-3.5 py-2.5 text-sm leading-relaxed text-slate-800 shadow-sm"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
@@ -131,6 +133,7 @@ function ConversationList({
 
 export function ChatPanel({
   expanded,
+  mobile = false,
   conversations,
   conversationsLoading,
   activeId,
@@ -156,8 +159,9 @@ export function ChatPanel({
   }, [messages, loading]);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, [expanded, activeId]);
+    // Don't pop the keyboard open on phones just because the panel opened
+    if (!mobile) inputRef.current?.focus();
+  }, [expanded, activeId, mobile]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -169,7 +173,7 @@ export function ChatPanel({
   const activeTitle = conversations.find((c) => c.id === activeId)?.title;
   const isEmpty = messages.length === 0 && !messagesLoading;
 
-  const headerBtn = "grid h-7 w-7 place-items-center rounded-lg text-green-100 transition hover:bg-white/20 hover:text-white";
+  const headerBtn = "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-green-100 transition hover:bg-white/20 hover:text-white sm:h-7 sm:w-7";
 
   return (
     <div
@@ -177,7 +181,7 @@ export function ChatPanel({
       className={cn(
         "flex overflow-hidden bg-white shadow-[0_24px_80px_-12px_rgba(22,163,74,0.3),0_0_0_1px_rgba(22,163,74,0.12)]",
         expanded
-          ? "h-full w-full max-w-6xl rounded-none sm:rounded-3xl"
+          ? "h-full w-full max-w-6xl rounded-none md:rounded-3xl"
           : "h-[calc(100vh-6.5rem)] max-h-[600px] min-h-[350px] w-[calc(100vw-1.5rem)] max-w-[400px] rounded-3xl"
       )}
     >
@@ -199,14 +203,14 @@ export function ChatPanel({
       <div className="relative flex min-w-0 flex-1 flex-col">
         {/* Header */}
         <div
-          className="relative flex items-center gap-2.5 px-4 py-3"
+          className="relative flex items-center gap-1.5 px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:gap-2.5 sm:px-4 sm:py-3"
           style={{ background: "linear-gradient(135deg, #15803d 0%, #16a34a 50%, #22c55e 100%)" }}
         >
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/30" />
           <img src="/logo.png" alt="LifePulse AI" className="h-8 w-8 shrink-0 rounded-xl border border-white/20 object-cover shadow-sm" />
           <div className="min-w-0 flex-1 leading-tight">
             <p className="truncate font-display text-sm font-bold text-white">{activeTitle ?? "LifePulse AI"}</p>
-            <p className="text-[10px] text-green-100">{loading ? "Thinking…" : "Remembers your chats · knows your week"}</p>
+            <p className="truncate text-[10px] text-green-100">{loading ? "Thinking…" : "Remembers your chats · knows your week"}</p>
           </div>
 
           <button onClick={() => onSend(WEEKLY_REVIEW_PROMPT)} title="Review my week" className={headerBtn} disabled={loading}>
@@ -229,7 +233,7 @@ export function ChatPanel({
           >
             <SquarePen className="h-3.5 w-3.5" />
           </button>
-          <button onClick={onToggleExpand} title={expanded ? "Exit full window" : "Full window"} className={headerBtn}>
+          <button onClick={onToggleExpand} title={expanded ? "Exit full window" : "Full window"} className={cn(headerBtn, mobile && "hidden")}>
             {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
           <button onClick={onClose} title="Close" className={headerBtn}>
@@ -239,7 +243,7 @@ export function ChatPanel({
 
         {/* Past chats overlay (compact mode / small screens) */}
         {showHistory && (
-          <div className={cn("absolute inset-x-0 bottom-0 top-[56px] z-10 overflow-y-auto bg-white", expanded && "md:hidden")}>
+          <div className={cn("absolute inset-x-0 bottom-0 top-[56px] z-10 overflow-y-auto overscroll-contain bg-white", expanded && "md:hidden")}>
             <p className="px-4 pt-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Your chats</p>
             <ConversationList
               conversations={conversations}
@@ -255,7 +259,7 @@ export function ChatPanel({
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4" style={{ background: "#f0faf4" }}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4" style={{ background: "#f0faf4" }}>
           <div className={cn("space-y-3", expanded && "mx-auto max-w-3xl")}>
             {messagesLoading && (
               <div className="flex items-center justify-center py-10 text-xs text-slate-400">
@@ -328,7 +332,7 @@ export function ChatPanel({
         </div>
 
         {/* Input */}
-        <div className="border-t border-green-100 bg-white px-3 py-3">
+        <div className="border-t border-green-100 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
           <div
             className={cn(
               "flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 transition focus-within:border-green-400 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(22,163,74,0.12)]",
@@ -348,7 +352,7 @@ export function ChatPanel({
               onKeyDown={handleKey}
               placeholder="Ask me anything…"
               disabled={loading}
-              className="flex-1 resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:opacity-50"
+              className="min-w-0 flex-1 resize-none bg-transparent text-base text-slate-800 outline-none placeholder:text-slate-400 disabled:opacity-50 sm:text-sm"
               style={{ maxHeight: 160 }}
             />
             <button
@@ -361,7 +365,7 @@ export function ChatPanel({
               <Send className="h-3.5 w-3.5" />
             </button>
           </div>
-          <p className="mt-1.5 text-center text-[10px] text-slate-400">Powered by Gemini · Enter to send · Shift+Enter for new line</p>
+          <p className="mt-1.5 hidden text-center text-[10px] text-slate-400 sm:block">Powered by Gemini · Enter to send · Shift+Enter for new line</p>
         </div>
       </div>
     </div>

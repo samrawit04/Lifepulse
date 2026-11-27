@@ -287,13 +287,13 @@ export function SidebarUserProfile({ onSignOut, onOpenSettings, onCustomize }: S
 
               <div className="space-y-1.5">
                 <Label htmlFor="statusMessage" className="text-xs font-medium text-foreground">
-                  Status or Motto (optional)
+                  Bio (optional)
                 </Label>
                 <Input
                   id="statusMessage"
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}
-                  placeholder="e.g. In the flow · Making progress"
+                  placeholder="A line about you, e.g. Building things that matter"
                   className="h-9 rounded-xl border-white/10 bg-white/[0.03] text-sm focus-visible:border-primary/50"
                   maxLength={60}
                 />

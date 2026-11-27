@@ -468,6 +468,8 @@ html.light .text-gradient-primary {
 /* Tables */
 .note-prose .tableWrapper { overflow-x: auto; margin: 0.75em 0; border-radius: 0.75rem; border: 1px solid var(--border); }
 .note-prose table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 0; overflow: hidden; }
+/* Phones: keep columns readable and let the table scroll sideways instead of squashing */
+@media (max-width: 640px) { .note-prose table { table-layout: auto; width: max-content; min-width: 100%; } .note-prose table td, .note-prose table th { min-width: 7rem; } }
 .note-prose td, .note-prose th {
   border: 1px solid var(--border);
   padding: 0.4em 0.6em;

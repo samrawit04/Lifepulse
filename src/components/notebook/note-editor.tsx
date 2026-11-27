@@ -8,7 +8,6 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
-  Archive as ArchiveIcon,
   Bold,
   Camera,
   ChevronLeft,
@@ -115,13 +114,11 @@ export function NoteEditor({
   page,
   onClose,
   onChange,
-  onArchive,
   onDelete,
 }: {
   page: Item;
   onClose: () => void;
   onChange: (p: Partial<Item>) => void;
-  onArchive: () => void;
   onDelete: () => void;
 }) {
   const [title, setTitle] = useState(page.title ?? "");
@@ -482,14 +479,6 @@ export function NoteEditor({
                 )}
               <div className="mx-1 h-4 w-px shrink-0 bg-white/[0.08]" />
               <button
-                onClick={onArchive}
-                className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
-                title="Archive"
-              >
-                <ArchiveIcon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Archive</span>
-              </button>
-              <button
                 onClick={() => setDeleteDialogOpen(true)}
                 className="flex shrink-0 items-center gap-1 rounded-lg bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive transition-colors hover:bg-destructive/20"
                 title="Delete"
@@ -607,20 +596,25 @@ function FormattingToolbar({ editor }: { editor: Editor }) {
           <LinkMenu editor={editor} active={s.link} />
           <TBtn title="Clear formatting" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}><Eraser className="h-4 w-4" /></TBtn>
 
-          {s.inTable && (
-            <>
-              <Sep />
-              <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Table</span>
-              <TextBtn onClick={() => editor.chain().focus().addRowAfter().run()}>+ Row</TextBtn>
-              <TextBtn onClick={() => editor.chain().focus().addColumnAfter().run()}>+ Column</TextBtn>
-              <TextBtn onClick={() => editor.chain().focus().deleteRow().run()}>− Row</TextBtn>
-              <TextBtn onClick={() => editor.chain().focus().deleteColumn().run()}>− Column</TextBtn>
-              <TextBtn onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Header row</TextBtn>
-              <TextBtn danger onClick={() => editor.chain().focus().deleteTable().run()}>Delete table</TextBtn>
-            </>
-          )}
         </div>
       </div>
+
+      {/* Table tools get their own row so they're always visible, also on phones */}
+      {s.inTable && (
+        <div className="border-t border-white/[0.06] bg-primary/[0.04]">
+          <div className="mx-auto flex max-w-4xl items-center gap-1 overflow-x-auto px-2 py-1.5 scrollbar-none sm:flex-wrap sm:px-3">
+            <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-primary/80">Table</span>
+            <TextBtn onClick={() => editor.chain().focus().addRowBefore().run()}>+ Row above</TextBtn>
+            <TextBtn onClick={() => editor.chain().focus().addRowAfter().run()}>+ Row below</TextBtn>
+            <TextBtn onClick={() => editor.chain().focus().addColumnBefore().run()}>+ Col left</TextBtn>
+            <TextBtn onClick={() => editor.chain().focus().addColumnAfter().run()}>+ Col right</TextBtn>
+            <TextBtn onClick={() => editor.chain().focus().deleteRow().run()}>− Row</TextBtn>
+            <TextBtn onClick={() => editor.chain().focus().deleteColumn().run()}>− Col</TextBtn>
+            <TextBtn onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Header row</TextBtn>
+            <TextBtn danger onClick={() => editor.chain().focus().deleteTable().run()}>Delete table</TextBtn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -646,6 +640,7 @@ function TBtn({
       aria-pressed={active}
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
+      onPointerDown={(e) => e.pointerType !== "mouse" && e.preventDefault()}
       onClick={onClick}
       className={cn(
         "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30",
@@ -662,9 +657,10 @@ function TextBtn({ children, onClick, danger }: { children: React.ReactNode; onC
     <button
       type="button"
       onMouseDown={(e) => e.preventDefault()}
+      onPointerDown={(e) => e.pointerType !== "mouse" && e.preventDefault()}
       onClick={onClick}
       className={cn(
-        "h-8 shrink-0 rounded-lg px-2 text-[11px] font-medium transition-colors",
+        "h-9 shrink-0 rounded-lg border border-white/[0.08] px-2.5 text-xs font-medium transition-colors sm:h-8 sm:border-transparent sm:px-2 sm:text-[11px]",
         danger ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground hover:bg-white/[0.08] hover:text-foreground"
       )}
     >

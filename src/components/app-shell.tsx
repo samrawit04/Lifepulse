@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   Loader2,
   Search,
+  ShieldCheck,
 } from "lucide-react";
 import { apiClient } from "@/integrations/api/client";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ import { GlobalAudioPlayer } from "@/components/global-audio-player";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationPoller } from "@/components/notification-poller";
 import { SidebarNotebookTree } from "@/components/sidebar-notebook-tree";
+import { useIsAdmin } from "@/hooks/use-admin";
 import { useSidebarPreferences, ALL_SIDEBAR_ITEMS } from "@/hooks/use-sidebar-preferences";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { SidebarUserProfile } from "@/components/sidebar-user-profile";
@@ -36,6 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [isMobile, setIsMobile] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const { isVisible, items: navItems } = useSidebarPreferences();
+  const isAdmin = useIsAdmin();
   const { data: userProfile } = useUserProfile();
   const updateProfile = useUpdateUserProfile();
   const navigate = useNavigate();
@@ -43,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const pageTitle = (() => {
     const found = ALL_SIDEBAR_ITEMS.find((n) => pathname === n.to || pathname.startsWith(n.to + "/"));
-    return found?.label ?? "LifePulse";
+    return found?.label ?? (pathname.startsWith("/admin") ? "Admin" : "LifePulse");
   })();
 
   // Theme comes from the user's profile on the server
@@ -195,6 +198,25 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               );
             })}
+
+          {/* Only accounts listed in Admin__Emails on the server see this */}
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className={cn(
+                "group mt-3 flex items-center gap-3 rounded-xl border-t border-white/5 px-3 py-2 pt-3 text-sm font-medium transition-colors",
+                pathname.startsWith("/admin")
+                  ? "bg-primary/10 text-foreground font-semibold"
+                  : "text-sidebar-foreground/80 hover:bg-white/[0.04] hover:text-foreground",
+              )}
+            >
+              <ShieldCheck
+                className={cn("h-4 w-4", pathname.startsWith("/admin") ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
+                strokeWidth={1.75}
+              />
+              Admin
+            </Link>
+          )}
         </nav>
 
         <SidebarUserProfile

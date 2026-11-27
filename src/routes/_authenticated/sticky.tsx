@@ -71,7 +71,7 @@ function StickyBoard() {
         content: "",
         color: palette.value,
         pos_x: Math.max(10, canvasPos.x - DEFAULT_W / 2),
-        pos_y: Math.max(10, canvasPos.y - 30),
+        pos_y: Math.max(56, canvasPos.y - 30),
         width: DEFAULT_W,
         height: DEFAULT_H,
       },
@@ -171,28 +171,27 @@ function StickyBoard() {
   const zoomPercent = Math.round(zoom * 100);
 
   return (
-    <div className="relative flex h-[calc(100dvh-48px)] lg:h-dvh flex-col p-3 sm:p-4 lg:p-6 overflow-hidden">
-      <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/60 px-4 sm:px-6 py-3 backdrop-blur rounded-2xl mb-3">
-        <div>
-          <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Sticky Board</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Double-click anywhere to create a sticky note
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground hidden sm:inline">{notes.length} notes</span>
+    <div className="relative flex h-[calc(100dvh-48px)] lg:h-dvh flex-col overflow-hidden">
+      {/* Board fills the whole page; the toolbar floats over its top edge */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        <header
+          onDoubleClick={(e) => e.stopPropagation()}
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-2 px-3 pt-2.5 sm:px-4 sm:pt-3"
+        >
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-border/60 bg-background/80 px-3 py-1.5 shadow-lg backdrop-blur-lg">
+            <h1 className="font-display text-sm font-semibold text-foreground sm:text-base">Sticky Board</h1>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{notes.length}</span>
+            <span className="hidden text-[11px] text-muted-foreground md:inline">Double-click anywhere to add a note</span>
+          </div>
           <Button
             onClick={handleAddCenter}
             size="sm"
-            className="h-8 rounded-xl bg-primary text-primary-foreground hover:bg-primary/95 text-xs font-semibold gap-1.5 shadow-sm"
+            className="pointer-events-auto h-8 gap-1.5 rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-lg hover:bg-primary/95"
           >
             <Plus className="h-4 w-4" /> Add Note
           </Button>
-        </div>
-      </header>
+        </header>
 
-      {/* Board container with fixed overlays */}
-      <div className="relative flex-1 min-h-0 rounded-2xl overflow-hidden border border-border/40">
         {/* Scrollable board with native scrollbars */}
         <div
           ref={boardRef}
