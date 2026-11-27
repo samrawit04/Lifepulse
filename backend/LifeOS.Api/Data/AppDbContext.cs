@@ -17,6 +17,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<Income> Incomes => Set<Income>();
+    public DbSet<Debt> Debts => Set<Debt>();
+    public DbSet<DebtPayment> DebtPayments => Set<DebtPayment>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -214,6 +217,44 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(m => m.Text).HasColumnType("text").IsRequired();
             e.HasIndex(m => new { m.ConversationId, m.CreatedAt });
         });
+
+        // ── Income ─────────────────────────────────────────────────────────
+        model.Entity<Income>(e =>
+        {
+            e.HasKey(i => i.Id);
+            e.HasOne(i => i.User)
+             .WithMany(u => u.Incomes)
+             .HasForeignKey(i => i.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.Property(i => i.Amount).HasColumnType("numeric(12,2)");
+            e.Property(i => i.Source).HasMaxLength(100).IsRequired();
+            e.HasIndex(i => new { i.UserId, i.ReceivedAt });
+        });
+
+        // ── Debts & repayments ─────────────────────────────────────────────
+        model.Entity<Debt>(e =>
+        {
+            e.HasKey(d => d.Id);
+            e.HasOne(d => d.User)
+             .WithMany(u => u.Debts)
+             .HasForeignKey(d => d.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.Property(d => d.Amount).HasColumnType("numeric(12,2)");
+            e.Property(d => d.Direction).HasMaxLength(20).IsRequired();
+            e.Property(d => d.Person).HasMaxLength(100).IsRequired();
+            e.HasIndex(d => new { d.UserId, d.Settled });
+        });
+
+        model.Entity<DebtPayment>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.HasOne(p => p.Debt)
+             .WithMany(d => d.Payments)
+             .HasForeignKey(p => p.DebtId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.Property(p => p.Amount).HasColumnType("numeric(12,2)");
+            e.HasIndex(p => p.DebtId);
+        });
     }
 
     // Auto-update UpdatedAt on every SaveChanges
@@ -231,6 +272,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 if (entry.Entity is PlannedPurchase pp) pp.UpdatedAt = now;
                 if (entry.Entity is CategoryBudget cb) cb.UpdatedAt = now;
                 if (entry.Entity is UserSetting us) us.UpdatedAt = now;
+                if (entry.Entity is Income inc) inc.UpdatedAt = now;
+                if (entry.Entity is Debt debt) debt.UpdatedAt = now;
             }
         }
         return base.SaveChangesAsync(ct);

@@ -5,7 +5,7 @@ import {
   startOfDay, endOfDay, startOfWeek, endOfWeek,
   isWithinInterval, eachDayOfInterval, subDays, isToday, isYesterday,
 } from "date-fns";
-import { Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Search, X, ShoppingBag, Check, Loader2 } from "lucide-react";
+import { Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Search, X, ShoppingBag, Check, Loader2, ArrowDownLeft, ArrowUpRight, HandCoins } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCreateExpense,
@@ -16,6 +16,21 @@ import {
   useUpdateExpense,
 } from "@/hooks/use-expenses";
 import { useUserSetting } from "@/hooks/use-user-setting";
+import {
+  useAddDebtPayment,
+  useCreateDebt,
+  useCreateIncome,
+  useDebts,
+  useDeleteDebt,
+  useDeleteDebtPayment,
+  useDeleteIncome,
+  useIncomes,
+  useUpdateDebt,
+  useUpdateIncome,
+  type Debt,
+  type DebtDirection,
+  type Income,
+} from "@/hooks/use-money";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   usePlannedPurchases,
@@ -295,6 +310,11 @@ function ExpensesPage() {
 
 // ─── Tab 1: Log spend ────────────────────────────────────────────────────────
 
+type LogMode = "spent" | "income" | "debt";
+
+const BUILT_IN_SOURCES = ["Salary", "Freelance", "Business", "Gift", "Refund"];
+const NO_SOURCES: string[] = [];
+
 function LogTab({
   expenses,
   onCreate,
@@ -306,27 +326,68 @@ function LogTab({
   onDelete: (id: string) => void;
   deleting: boolean;
 }) {
+  const [mode, setMode] = useState<LogMode>("spent");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<string>("Food");
+  const [source, setSource] = useState<string>("Salary");
   const [note, setNote] = useState("");
+  const [direction, setDirection] = useState<DebtDirection>("i_owe");
+  const [person, setPerson] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date>(() => startOfDay(new Date()));
+
+  const { data: incomes = [] } = useIncomes();
+  const { data: debts = [] } = useDebts();
+  const createIncome = useCreateIncome();
+  const createDebt = useCreateDebt();
+  const deleteIncome = useDeleteIncome();
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
+  const [openDebt, setOpenDebt] = useState<Debt | null>(null);
+  const [confirmIncomeId, setConfirmIncomeId] = useState<string | null>(null);
 
   const isSelectedToday = startOfDay(selectedDate).getTime() === startOfDay(new Date()).getTime();
   const selectedDateLabel = dayLabel(selectedDate);
 
-  const dayExpenses = useMemo(() => {
-    const s = startOfDay(selectedDate);
-    const e = endOfDay(selectedDate);
-    return expenses
-      .filter((x) => isWithinInterval(new Date(x.occurred_at), { start: s, end: e }))
-      .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
-  }, [expenses, selectedDate]);
-  const dayTotal = dayExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const inDay = (iso: string) => isWithinInterval(new Date(iso), { start: startOfDay(selectedDate), end: endOfDay(selectedDate) });
+  const dayExpenses = useMemo(
+    () => expenses.filter((x) => inDay(x.occurred_at)).sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [expenses, selectedDate]
+  );
+  const dayIncomes = useMemo(
+    () => incomes.filter((x) => inDay(x.received_at)).sort((a, b) => (a.received_at < b.received_at ? 1 : -1)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [incomes, selectedDate]
+  );
+  const daySpent = dayExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const dayIn = dayIncomes.reduce((s, e) => s + Number(e.amount), 0);
+
+  // This month at a glance
+  const monthStart = startOfMonth(new Date());
+  const monthSpent = expenses.filter((e) => new Date(e.occurred_at) >= monthStart).reduce((s, e) => s + Number(e.amount), 0);
+  const monthIncome = incomes.filter((i) => new Date(i.received_at) >= monthStart).reduce((s, i) => s + Number(i.amount), 0);
+  const openDebts = debts.filter((d) => !d.settled);
+  const iOwe = openDebts.filter((d) => d.direction === "i_owe").reduce((s, d) => s + d.remaining, 0);
+  const owedToMe = openDebts.filter((d) => d.direction === "owed_to_me").reduce((s, d) => s + d.remaining, 0);
 
   const goToNextDay = () => {
     const next = new Date(selectedDate);
     next.setDate(next.getDate() + 1);
     if (startOfDay(next) <= startOfDay(new Date())) setSelectedDate(startOfDay(next));
+  };
+
+  const atSelectedDay = () => {
+    const d = new Date(selectedDate);
+    const t = new Date();
+    d.setHours(t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds());
+    return d.toISOString();
+  };
+
+  const reset = () => {
+    setAmount("");
+    setNote("");
+    setPerson("");
+    setDueDate("");
   };
 
   const submit = (e: React.FormEvent) => {
@@ -336,126 +397,273 @@ function LogTab({
       toast.error("Enter a valid amount");
       return;
     }
-    // Selected day + current time-of-day, so backdated entries sort sensibly
-    const occurred = new Date(selectedDate);
-    const t = new Date();
-    occurred.setHours(t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds());
-    onCreate.mutate(
-      { amount: n, category, note: note || null, occurred_at: occurred.toISOString() },
-      {
-        onSuccess: () => {
-          setAmount("");
-          setNote("");
-          toast.success("Expense saved");
-        },
-        onError: (err) => toast.error(err.message),
+    if (mode === "spent") {
+      onCreate.mutate(
+        { amount: n, category, note: note || null, occurred_at: atSelectedDay() },
+        { onSuccess: () => { reset(); toast.success("Expense saved"); }, onError: (err) => toast.error(err.message) }
+      );
+    } else if (mode === "income") {
+      createIncome.mutate(
+        { amount: n, source, note: note || null, received_at: atSelectedDay() },
+        { onSuccess: () => { reset(); toast.success("Income saved"); }, onError: (err) => toast.error(err.message) }
+      );
+    } else {
+      if (!person.trim()) {
+        toast.error(direction === "i_owe" ? "Who do you owe?" : "Who owes you?");
+        return;
       }
-    );
+      createDebt.mutate(
+        {
+          direction,
+          person: person.trim(),
+          amount: n,
+          note: note || null,
+          due_date: dueDate ? new Date(dueDate + "T12:00:00").toISOString() : null,
+        },
+        { onSuccess: () => { reset(); toast.success("Debt saved"); }, onError: (err) => toast.error(err.message) }
+      );
+    }
   };
 
+  const saving = onCreate.isPending || createIncome.isPending || createDebt.isPending;
+  const modeTabs: { id: LogMode; label: string }[] = [
+    { id: "spent", label: "Spent" },
+    { id: "income", label: "Income" },
+    { id: "debt", label: "Debt" },
+  ];
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-      <form onSubmit={submit} className="glass-card space-y-4 rounded-3xl p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <button
-            type="button"
-            onClick={() => setSelectedDate((d) => subDays(d, 1))}
-            className="h-8 w-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            title="Previous day"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <select
-            value={format(selectedDate, "yyyy-MM-dd")}
-            onChange={(e) => setSelectedDate(startOfDay(new Date(e.target.value + "T00:00:00")))}
-            className="flex-1 bg-muted border border-white/10 rounded-xl px-3 py-1.5 text-sm font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer text-center appearance-none hover:bg-white/[0.10] transition-colors"
-            style={{ colorScheme: "light" }}
-          >
-            {eachDayOfInterval({ start: startOfMonth(selectedDate), end: new Date() })
-              .reverse()
-              .map((day) => {
-                const val = format(day, "yyyy-MM-dd");
-                const label = isToday(day)
-                  ? "Today — " + format(day, "MMM d")
-                  : isYesterday(day)
-                    ? "Yesterday — " + format(day, "MMM d")
-                    : format(day, "EEE, MMM d");
-                return <option key={val} value={val} style={{ color: "#111", backgroundColor: "#fff" }}>{label}</option>;
-              })}
-          </select>
-          <button
-            type="button"
-            onClick={goToNextDay}
-            disabled={isSelectedToday}
-            className="h-8 w-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-            title="Next day"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        <h2 className="font-display text-base font-semibold text-lagoon">
-          {isSelectedToday ? "Log Spent Today" : `Add to ${selectedDateLabel}`}
-        </h2>
-
-        <div className="grid grid-cols-[1fr_auto] gap-3">
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            inputMode="decimal"
-            placeholder="Amount spent…"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="h-12 text-lg border-white/10 bg-white/[0.03]"
-            autoFocus
-          />
-          <div className="grid h-12 place-items-center rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm text-muted-foreground font-semibold">
-            {CURRENCY}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Category</label>
-          <CategoryPicker value={category} onChange={setCategory} />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Note</label>
-          <Input
-            placeholder="What did you buy? (optional)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="h-10 border-white/10 bg-white/[0.03]"
-          />
-        </div>
-
-        <Button type="submit" className="w-full h-11 gap-2 bg-lagoon text-cream hover:bg-lagoon/90 font-semibold" disabled={onCreate.isPending}>
-          <Plus className="h-4 w-4" /> Save Expense
-        </Button>
-      </form>
-
-      <div className="glass-card rounded-3xl p-5 sm:p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between border-b border-white/5 pb-3 gap-2">
-          <h2 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider">{selectedDateLabel}</h2>
-          <span className="text-sm font-bold text-foreground">
-            {money(dayTotal)} {CURRENCY}
-          </span>
-        </div>
-
-        {dayExpenses.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-8">
-            Nothing logged for {selectedDateLabel.toLowerCase()} yet.
-          </p>
-        ) : (
-          <ul className="divide-y divide-white/5">
-            {dayExpenses.map((e) => (
-              <ExpenseRow key={e.id} e={e} showTime onDelete={() => onDelete(e.id)} disabled={deleting} />
-            ))}
-          </ul>
-        )}
-        <p className="text-[11px] text-muted-foreground/70">Looking for older entries? Open Spend Analytics for your full history.</p>
+    <div className="space-y-6">
+      {/* This month at a glance */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MiniStat label="Income this month" value={monthIncome} tone="good" />
+        <MiniStat label="Spent this month" value={monthSpent} />
+        <MiniStat label="You owe" value={iOwe} tone={iOwe > 0 ? "bad" : undefined} />
+        <MiniStat label="Owed to you" value={owedToMe} tone={owedToMe > 0 ? "good" : undefined} />
       </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+        <form onSubmit={submit} className="glass-card space-y-4 rounded-3xl p-5 sm:p-6">
+          {/* Spent / Income / Debt */}
+          <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-1 text-xs">
+            {modeTabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setMode(t.id)}
+                className={cn(
+                  "rounded-lg py-1.5 font-semibold transition",
+                  mode === t.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {mode !== "debt" && (
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDate((d) => subDays(d, 1))}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-muted-foreground transition-colors hover:bg-white/[0.10] hover:text-foreground"
+                title="Previous day"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <select
+                value={format(selectedDate, "yyyy-MM-dd")}
+                onChange={(e) => setSelectedDate(startOfDay(new Date(e.target.value + "T00:00:00")))}
+                className="flex-1 cursor-pointer appearance-none rounded-xl border border-white/10 bg-white/[0.06] px-3 py-1.5 text-center text-sm font-semibold text-foreground transition-colors hover:bg-white/[0.10] focus:outline-none focus:ring-1 focus:ring-primary/50"
+                style={{ colorScheme: "light" }}
+              >
+                {eachDayOfInterval({ start: startOfMonth(selectedDate), end: new Date() })
+                  .reverse()
+                  .map((day) => {
+                    const val = format(day, "yyyy-MM-dd");
+                    const label = isToday(day)
+                      ? "Today — " + format(day, "MMM d")
+                      : isYesterday(day)
+                        ? "Yesterday — " + format(day, "MMM d")
+                        : format(day, "EEE, MMM d");
+                    return <option key={val} value={val} style={{ color: "#111", backgroundColor: "#fff" }}>{label}</option>;
+                  })}
+              </select>
+              <button
+                type="button"
+                onClick={goToNextDay}
+                disabled={isSelectedToday}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-muted-foreground transition-colors hover:bg-white/[0.10] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                title="Next day"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          <h2 className="font-display text-base font-semibold text-lagoon">
+            {mode === "spent"
+              ? isSelectedToday ? "Log Spent Today" : `Spent on ${selectedDateLabel}`
+              : mode === "income"
+                ? isSelectedToday ? "Log Income Today" : `Income on ${selectedDateLabel}`
+                : "Add a Debt"}
+          </h2>
+
+          {mode === "debt" && (
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { id: "i_owe", label: "I owe someone", icon: <ArrowUpRight className="h-4 w-4" /> },
+                { id: "owed_to_me", label: "Someone owes me", icon: <ArrowDownLeft className="h-4 w-4" /> },
+              ] as const).map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setDirection(d.id)}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition",
+                    direction === d.id
+                      ? d.id === "i_owe"
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
+                      : "border-white/10 text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {d.icon} {d.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {mode === "debt" && (
+            <Input
+              placeholder={direction === "i_owe" ? "Who do you owe? (person or bank)" : "Who owes you?"}
+              value={person}
+              onChange={(e) => setPerson(e.target.value)}
+              maxLength={100}
+              className="h-10 border-white/10 bg-white/[0.03]"
+            />
+          )}
+
+          <div className="grid grid-cols-[1fr_auto] gap-3">
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              inputMode="decimal"
+              placeholder={mode === "spent" ? "Amount spent…" : mode === "income" ? "Amount received…" : "Amount…"}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="h-12 border-white/10 bg-white/[0.03] text-lg"
+              autoFocus
+            />
+            <div className="grid h-12 place-items-center rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-muted-foreground">
+              {CURRENCY}
+            </div>
+          </div>
+
+          {mode === "spent" && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</label>
+              <CategoryPicker value={category} onChange={setCategory} />
+            </div>
+          )}
+
+          {mode === "income" && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Source</label>
+              <SourcePicker value={source} onChange={setSource} />
+            </div>
+          )}
+
+          {mode === "debt" && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Due date (optional)</label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-10 border-white/10 bg-white/[0.03]" />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Note</label>
+            <Input
+              placeholder={mode === "spent" ? "What did you buy? (optional)" : mode === "income" ? "e.g. November salary (optional)" : "What is it for? (optional)"}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="h-10 border-white/10 bg-white/[0.03]"
+            />
+          </div>
+
+          <Button type="submit" className="h-11 w-full gap-2 bg-lagoon font-semibold text-cream hover:bg-lagoon/90" disabled={saving}>
+            <Plus className="h-4 w-4" /> {mode === "spent" ? "Save Expense" : mode === "income" ? "Save Income" : "Save Debt"}
+          </Button>
+        </form>
+
+        <div className="space-y-6">
+          {/* Selected day */}
+          <div className="glass-card space-y-4 rounded-3xl p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
+              <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">{selectedDateLabel}</h2>
+              <span className="text-sm font-bold text-foreground">
+                {dayIn > 0 && <span className="mr-2 text-emerald-500">+{money(dayIn)}</span>}
+                −{money(daySpent)} {CURRENCY}
+              </span>
+            </div>
+
+            {dayExpenses.length === 0 && dayIncomes.length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">Nothing logged for {selectedDateLabel.toLowerCase()} yet.</p>
+            ) : (
+              <ul className="divide-y divide-white/5">
+                {dayIncomes.map((i) => (
+                  <IncomeRow key={i.id} income={i} onEdit={() => setEditingIncome(i)} onDelete={() => setConfirmIncomeId(i.id)} />
+                ))}
+                {dayExpenses.map((e) => (
+                  <ExpenseRow key={e.id} e={e} showTime onDelete={() => onDelete(e.id)} disabled={deleting} />
+                ))}
+              </ul>
+            )}
+            <p className="text-[11px] text-muted-foreground/70">Looking for older entries? Open Spend Analytics for your full history.</p>
+          </div>
+
+          {/* Debts */}
+          <DebtsCard debts={debts} onOpen={setOpenDebt} onAdd={() => setMode("debt")} />
+        </div>
+      </div>
+
+      <EditIncomeDialog income={editingIncome} onClose={() => setEditingIncome(null)} />
+      <DebtDialog debt={openDebt ? debts.find((d) => d.id === openDebt.id) ?? null : null} onClose={() => setOpenDebt(null)} onLogExpense={onCreate} />
+      <ConfirmDeleteDialog
+        open={confirmIncomeId !== null}
+        onOpenChange={(o) => !o && setConfirmIncomeId(null)}
+        title="Delete this income?"
+        description="This income record will be permanently deleted."
+        confirmLabel="Delete Income"
+        onConfirm={() => {
+          if (confirmIncomeId) {
+            deleteIncome.mutate(confirmIncomeId, {
+              onSuccess: () => toast.success("Income deleted"),
+              onError: (err) => toast.error(err.message),
+            });
+            setConfirmIncomeId(null);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone }: { label: string; value: number; tone?: "good" | "bad" }) {
+  return (
+    <div className="glass-card rounded-2xl p-3.5 sm:p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-[11px]">{label}</p>
+      <p
+        className={cn(
+          "mt-1 font-display text-lg font-semibold tabular-nums sm:text-xl",
+          tone === "good" && "text-emerald-500",
+          tone === "bad" && "text-destructive",
+          !tone && "text-foreground"
+        )}
+      >
+        {money(value, 0)} <span className="text-xs font-normal text-muted-foreground">{CURRENCY}</span>
+      </p>
     </div>
   );
 }
@@ -1363,5 +1571,414 @@ function EditExpenseDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── Income ──────────────────────────────────────────────────────────────────
+
+function SourcePicker({ value, onChange }: { value: string; onChange: (s: string) => void }) {
+  const { value: custom, save } = useUserSetting<string[]>("income-sources", NO_SOURCES);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const sources = useMemo(() => {
+    const out = [...BUILT_IN_SOURCES];
+    for (const c of custom) if (!out.some((x) => x.toLowerCase() === c.toLowerCase())) out.push(c);
+    if (value && !out.includes(value)) out.push(value);
+    return out;
+  }, [custom, value]);
+
+  const add = () => {
+    const name = draft.trim().replace(/\s+/g, " ");
+    setDraft("");
+    setAdding(false);
+    if (!name) return;
+    const existing = sources.find((x) => x.toLowerCase() === name.toLowerCase());
+    if (existing) return onChange(existing);
+    save([...custom, name]);
+    onChange(name);
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sources.map((s) => {
+        const isCustom = custom.includes(s);
+        return (
+          <span
+            key={s}
+            className={cn(
+              "group/chip flex items-center rounded-full border text-xs transition",
+              value === s ? "border-emerald-500/50 bg-emerald-500/15 text-foreground" : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <button type="button" onClick={() => onChange(s)} className={cn("py-1.5 pl-3", isCustom ? "pr-1.5" : "pr-3")}>{s}</button>
+            {isCustom && (
+              <button
+                type="button"
+                onClick={() => { save(custom.filter((c) => c !== s)); if (value === s) onChange(BUILT_IN_SOURCES[0]); }}
+                className="mr-1.5 rounded-full p-0.5 text-muted-foreground/60 hover:text-destructive sm:opacity-0 sm:group-hover/chip:opacity-100"
+                title={`Remove "${s}"`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </span>
+        );
+      })}
+      {adding ? (
+        <span className="flex items-center gap-1 rounded-full border border-emerald-500/40 bg-background px-2 py-0.5">
+          <input
+            autoFocus
+            value={draft}
+            maxLength={40}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); add(); }
+              else if (e.key === "Escape") { setDraft(""); setAdding(false); }
+            }}
+            placeholder="New source"
+            className="w-24 bg-transparent px-1 py-1 text-xs text-foreground focus:outline-none"
+          />
+          <button type="button" onClick={add} className="rounded-full p-0.5 text-emerald-500" title="Add"><Check className="h-3.5 w-3.5" /></button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1 rounded-full border border-dashed border-white/20 px-3 py-1.5 text-xs text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-500"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add source
+        </button>
+      )}
+    </div>
+  );
+}
+
+function IncomeRow({ income, onEdit, onDelete }: { income: Income; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <li className="group flex items-center gap-3 py-2.5">
+      <div className="min-w-0 flex-1 cursor-pointer" onClick={onEdit}>
+        <p className="truncate text-sm font-medium text-foreground">{income.note || income.source}</p>
+        <p className="text-[11px] text-muted-foreground">
+          Income · {income.source} · {format(new Date(income.received_at), "p")}
+        </p>
+      </div>
+      <p className="shrink-0 text-sm font-semibold tabular-nums text-emerald-500">
+        +{money(income.amount)} <span className="text-[11px] font-normal text-muted-foreground">{CURRENCY}</span>
+      </p>
+      <button type="button" onClick={onEdit} className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary sm:opacity-0 sm:group-hover:opacity-100" title="Edit income">
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" onClick={onDelete} className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/15 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100" title="Delete income">
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </li>
+  );
+}
+
+function EditIncomeDialog({ income, onClose }: { income: Income | null; onClose: () => void }) {
+  const update = useUpdateIncome();
+  const [amount, setAmount] = useState("");
+  const [source, setSource] = useState("");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState("");
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  if (income && income.id !== loadedId) {
+    setLoadedId(income.id);
+    setAmount(String(income.amount));
+    setSource(income.source);
+    setNote(income.note ?? "");
+    setDate(format(new Date(income.received_at), "yyyy-MM-dd"));
+  }
+  if (!income && loadedId !== null) setLoadedId(null);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!income) return;
+    const n = parseFloat(amount);
+    if (!n || n <= 0) return toast.error("Enter a valid amount");
+    const when = new Date(income.received_at);
+    const [y, m, d] = date.split("-").map(Number);
+    if (y && m && d) when.setFullYear(y, m - 1, d);
+    update.mutate(
+      { id: income.id, patch: { amount: n, source, note: note.trim(), received_at: when.toISOString() } },
+      { onSuccess: () => { toast.success("Income updated"); onClose(); }, onError: (err) => toast.error(err.message) }
+    );
+  };
+
+  return (
+    <Dialog open={income !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[calc(100vw-2rem)] rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-2xl sm:max-w-md sm:p-6">
+        <form onSubmit={submit}>
+          <DialogHeader><DialogTitle className="font-display text-lg font-bold">Edit income</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-5">
+            <Input type="number" step="0.01" min="0" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-11 text-base" autoFocus />
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Source</label>
+              <SourcePicker value={source} onChange={setSource} />
+            </div>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-10" />
+            <Input type="date" value={date} max={format(new Date(), "yyyy-MM-dd")} onChange={(e) => setDate(e.target.value)} className="h-10" />
+          </div>
+          <DialogFooter className="flex-row justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose} className="h-9 rounded-xl text-xs">Cancel</Button>
+            <Button type="submit" size="sm" disabled={update.isPending} className="h-9 rounded-xl px-4 text-xs font-semibold">Save changes</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Debts ───────────────────────────────────────────────────────────────────
+
+function dueLabel(d: Debt) {
+  if (!d.due_date) return null;
+  const due = startOfDay(new Date(d.due_date));
+  const today = startOfDay(new Date());
+  const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return { text: `${Math.abs(days)}d overdue`, overdue: true };
+  if (days === 0) return { text: "Due today", overdue: true };
+  if (days === 1) return { text: "Due tomorrow", overdue: false };
+  return { text: `Due ${format(due, "MMM d")}`, overdue: false };
+}
+
+function DebtsCard({ debts, onOpen, onAdd }: { debts: Debt[]; onOpen: (d: Debt) => void; onAdd: () => void }) {
+  const [showSettled, setShowSettled] = useState(false);
+  const open = debts.filter((d) => !d.settled);
+  const settled = debts.filter((d) => d.settled);
+
+  return (
+    <div className="glass-card space-y-3 rounded-3xl p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <HandCoins className="h-4 w-4 text-primary" /> Debts
+        </h2>
+        <button onClick={onAdd} className="text-xs font-medium text-primary hover:underline">+ Add debt</button>
+      </div>
+
+      {open.length === 0 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">No open debts.</p>
+      ) : (
+        <ul className="space-y-2">
+          {open.map((d) => (
+            <DebtRow key={d.id} debt={d} onOpen={() => onOpen(d)} />
+          ))}
+        </ul>
+      )}
+
+      {settled.length > 0 && (
+        <div>
+          <button onClick={() => setShowSettled((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground">
+            {showSettled ? "Hide" : "Show"} settled ({settled.length})
+          </button>
+          {showSettled && (
+            <ul className="mt-2 space-y-2 opacity-70">
+              {settled.map((d) => (
+                <DebtRow key={d.id} debt={d} onOpen={() => onOpen(d)} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DebtRow({ debt, onOpen }: { debt: Debt; onOpen: () => void }) {
+  const due = dueLabel(debt);
+  const owe = debt.direction === "i_owe";
+  const pct = debt.amount > 0 ? (debt.paid / debt.amount) * 100 : 0;
+  return (
+    <li>
+      <button onClick={onOpen} className="w-full rounded-xl border border-white/10 p-3 text-left transition hover:bg-white/[0.04]">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">{debt.person}</p>
+            <p className="text-[11px] text-muted-foreground">
+              <span className={owe ? "text-destructive" : "text-emerald-500"}>{owe ? "You owe" : "Owes you"}</span>
+              {debt.note && ` · ${debt.note}`}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className={cn("text-sm font-semibold tabular-nums", debt.settled ? "text-muted-foreground line-through" : owe ? "text-destructive" : "text-emerald-500")}>
+              {money(debt.settled ? debt.amount : debt.remaining)} <span className="text-[11px] font-normal text-muted-foreground">{CURRENCY}</span>
+            </p>
+            {debt.settled ? (
+              <p className="text-[10px] text-muted-foreground">Settled</p>
+            ) : due ? (
+              <p className={cn("text-[10px]", due.overdue ? "font-semibold text-destructive" : "text-muted-foreground")}>{due.text}</p>
+            ) : null}
+          </div>
+        </div>
+        {!debt.settled && debt.paid > 0 && (
+          <div className="mt-2">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className={cn("h-full rounded-full", owe ? "bg-destructive/70" : "bg-emerald-500")} style={{ width: `${pct}%` }} />
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {money(debt.paid, 0)} of {money(debt.amount, 0)} {owe ? "paid back" : "received"}
+            </p>
+          </div>
+        )}
+      </button>
+    </li>
+  );
+}
+
+function DebtDialog({
+  debt,
+  onClose,
+  onLogExpense,
+}: {
+  debt: Debt | null;
+  onClose: () => void;
+  onLogExpense: ReturnType<typeof useCreateExpense>;
+}) {
+  const addPayment = useAddDebtPayment();
+  const deletePayment = useDeleteDebtPayment();
+  const updateDebt = useUpdateDebt();
+  const deleteDebt = useDeleteDebt();
+  const createIncome = useCreateIncome();
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [alsoLog, setAlsoLog] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+
+  if (debt && debt.id !== loadedId) {
+    setLoadedId(debt.id);
+    setAmount(debt.remaining > 0 ? String(debt.remaining) : "");
+    setDate(format(new Date(), "yyyy-MM-dd"));
+    setAlsoLog(true);
+  }
+  if (!debt && loadedId !== null) setLoadedId(null);
+  if (!debt) return null;
+
+  const owe = debt.direction === "i_owe";
+
+  const record = (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = parseFloat(amount);
+    if (!n || n <= 0) return toast.error("Enter a valid amount");
+    if (n > debt.remaining) return toast.error(`That's more than the remaining ${money(debt.remaining)}`);
+    const paidAt = new Date(date + "T12:00:00").toISOString();
+    addPayment.mutate(
+      { id: debt.id, amount: n, paid_at: paidAt },
+      {
+        onSuccess: () => {
+          toast.success(n >= debt.remaining ? "Debt settled" : "Payment recorded");
+          if (alsoLog) {
+            if (owe) onLogExpense.mutate({ amount: n, category: "Debt repayment", note: `Paid back ${debt.person}`, occurred_at: paidAt });
+            else createIncome.mutate({ amount: n, source: "Debt repaid", note: `${debt.person} paid back`, received_at: paidAt });
+          }
+          setAmount("");
+        },
+        onError: (err) => toast.error(err.message),
+      }
+    );
+  };
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="w-[calc(100vw-2rem)] rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-2xl sm:max-w-md sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg font-bold">{debt.person}</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              <span className={owe ? "text-destructive" : "text-emerald-500"}>{owe ? "You owe" : "Owes you"}</span> · {money(debt.amount)} {CURRENCY}
+              {debt.due_date && ` · due ${format(new Date(debt.due_date), "MMM d, yyyy")}`}
+              {debt.note && ` · ${debt.note}`}
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-xl border border-border p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{owe ? "Paid back" : "Received"}</p>
+                <p className="mt-0.5 font-semibold tabular-nums">{money(debt.paid)}</p>
+              </div>
+              <div className="rounded-xl border border-border p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Remaining</p>
+                <p className={cn("mt-0.5 font-semibold tabular-nums", owe ? "text-destructive" : "text-emerald-500")}>{money(debt.remaining)}</p>
+              </div>
+            </div>
+
+            {!debt.settled && (
+              <form onSubmit={record} className="space-y-2 rounded-xl border border-border p-3">
+                <p className="text-xs font-semibold text-foreground">{owe ? "Record a repayment" : "Record money received"}</p>
+                <div className="grid grid-cols-[1fr_9rem] gap-2">
+                  <Input type="number" step="0.01" min="0" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="h-10" />
+                  <Input type="date" value={date} max={format(new Date(), "yyyy-MM-dd")} onChange={(e) => setDate(e.target.value)} className="h-10" />
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={alsoLog} onChange={(e) => setAlsoLog(e.target.checked)} className="h-3.5 w-3.5 accent-[var(--primary)]" />
+                  {owe ? 'Also log it as an expense ("Debt repayment")' : 'Also log it as income ("Debt repaid")'}
+                </label>
+                <Button type="submit" size="sm" disabled={addPayment.isPending} className="h-9 w-full rounded-xl text-xs font-semibold">
+                  {addPayment.isPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />} Save payment
+                </Button>
+              </form>
+            )}
+
+            {debt.payments.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs font-semibold text-foreground">History</p>
+                <ul className="max-h-40 divide-y divide-border overflow-y-auto">
+                  {debt.payments.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-2 py-1.5 text-xs">
+                      <span className="text-muted-foreground">{format(new Date(p.paid_at), "MMM d, yyyy")}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium tabular-nums text-foreground">{money(p.amount)}</span>
+                        <button
+                          type="button"
+                          onClick={() => deletePayment.mutate({ id: debt.id, paymentId: p.id }, { onError: (err) => toast.error(err.message) })}
+                          className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                          title="Remove payment"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-row flex-wrap justify-between gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDelete(true)} className="h-9 text-xs text-destructive">
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                updateDebt.mutate(
+                  { id: debt.id, patch: { settled: !debt.settled } },
+                  { onSuccess: () => toast.success(debt.settled ? "Debt reopened" : "Marked as settled"), onError: (err) => toast.error(err.message) }
+                )
+              }
+              className="h-9 rounded-xl text-xs"
+            >
+              {debt.settled ? "Reopen" : "Mark as settled"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDeleteDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this debt?"
+        description="The debt and its payment history will be permanently deleted. Logged expenses or income stay."
+        confirmLabel="Delete Debt"
+        onConfirm={() => {
+          deleteDebt.mutate(debt.id, { onSuccess: () => toast.success("Debt deleted"), onError: (err) => toast.error(err.message) });
+          setConfirmDelete(false);
+          onClose();
+        }}
+      />
+    </>
   );
 }

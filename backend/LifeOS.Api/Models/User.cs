@@ -24,4 +24,6 @@ public class User
     public ICollection<CategoryBudget> CategoryBudgets { get; set; } = [];
     public ICollection<UserSetting> Settings { get; set; } = [];
     public ICollection<ChatConversation> ChatConversations { get; set; } = [];
+    public ICollection<Income> Incomes { get; set; } = [];
+    public ICollection<Debt> Debts { get; set; } = [];
 }
