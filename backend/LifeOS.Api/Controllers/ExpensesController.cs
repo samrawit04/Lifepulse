@@ -31,12 +31,17 @@ public class ExpensesController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<ExpenseDto>> Create([FromBody] CreateExpenseRequest req)
     {
         var userId = TokenService.GetUserId(User);
+        if (req.Amount <= 0) return BadRequest(new { message = "Amount must be greater than zero." });
+        var category = (req.Category ?? "").Trim();
+        if (category.Length == 0 || category.Length > 100)
+            return BadRequest(new { message = "Category must be 1–100 characters." });
+
         var expense = new Expense
         {
             UserId = userId,
             Amount = req.Amount,
             Currency = req.Currency,
-            Category = req.Category,
+            Category = category,
             Note = req.Note,
             OccurredAt = req.OccurredAt ?? DateTime.UtcNow,
         };
@@ -53,8 +58,18 @@ public class ExpensesController(AppDbContext db) : ControllerBase
         var expense = await db.Expenses.FirstOrDefaultAsync(e => e.Id == id && e.UserId == userId);
         if (expense is null) return NotFound();
 
-        if (req.Amount.HasValue) expense.Amount = req.Amount.Value;
-        if (req.Category is not null) expense.Category = req.Category;
+        if (req.Amount.HasValue)
+        {
+            if (req.Amount.Value <= 0) return BadRequest(new { message = "Amount must be greater than zero." });
+            expense.Amount = req.Amount.Value;
+        }
+        if (req.Category is not null)
+        {
+            var category = req.Category.Trim();
+            if (category.Length == 0 || category.Length > 100)
+                return BadRequest(new { message = "Category must be 1–100 characters." });
+            expense.Category = category;
+        }
         if (req.Note is not null) expense.Note = req.Note;
         if (req.OccurredAt.HasValue) expense.OccurredAt = req.OccurredAt.Value;
 

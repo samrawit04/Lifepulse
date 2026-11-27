@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import {
   format, startOfMonth, isSameMonth, subMonths,
   startOfDay, endOfDay, startOfWeek, endOfWeek,
   isWithinInterval, eachDayOfInterval, subDays, isToday, isYesterday,
 } from "date-fns";
-import { Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Search, X, ShoppingBag, Check } from "lucide-react";
+import { Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Search, X, ShoppingBag, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCreateExpense,
@@ -13,7 +13,10 @@ import {
   useExpenses,
   useCategoryBudgets,
   useUpsertCategoryBudgets,
+  useUpdateExpense,
 } from "@/hooks/use-expenses";
+import { useUserSetting } from "@/hooks/use-user-setting";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   usePlannedPurchases,
   useCreatePlannedPurchase,
@@ -36,6 +39,19 @@ type PeriodType = "today" | "week" | "month" | "last_month" | "all";
 
 const CURRENCY = "Birr";
 const NO_BUDGETS: Record<string, number> = {};
+const NO_CUSTOM: string[] = [];
+/** Built-in categories (the old catch-all "Other" is replaced by user-made categories). */
+const BUILT_IN_CATEGORIES = EXPENSE_CATEGORIES.map((c) => c.value as string).filter((c) => c !== "Other");
+
+type ExpenseUi = {
+  categories: string[];
+  customCategories: string[];
+  addCategory: (name: string) => string | null;
+  removeCategory: (name: string) => void;
+  onEdit: (e: Expense) => void;
+};
+const ExpenseUiCtx = createContext<ExpenseUi | null>(null);
+const useExpenseUi = () => useContext(ExpenseUiCtx)!;
 
 const PERIOD_LABELS: Record<PeriodType, string> = {
   today: "Today",
@@ -65,6 +81,36 @@ function ExpensesPage() {
   const deletePurchase = useDeletePlannedPurchase();
   const { data: budgetData } = useCategoryBudgets();
   const upsertBudgets = useUpsertCategoryBudgets();
+  const updateExpense = useUpdateExpense();
+
+  // Categories: built-ins + the user's own (saved to their account)
+  const { value: customCategories, save: saveCustomCategories } = useUserSetting<string[]>("expense-categories", NO_CUSTOM);
+  const categories = useMemo(() => {
+    const out = [...BUILT_IN_CATEGORIES];
+    for (const c of customCategories) if (!out.some((x) => x.toLowerCase() === c.toLowerCase())) out.push(c);
+    return out;
+  }, [customCategories]);
+
+  const addCategory = (raw: string): string | null => {
+    const name = raw.trim().replace(/\s+/g, " ");
+    if (!name) return null;
+    if (name.length > 40) {
+      toast.error("Keep category names under 40 characters");
+      return null;
+    }
+    const existing = categories.find((c) => c.toLowerCase() === name.toLowerCase());
+    if (existing) return existing;
+    saveCustomCategories([...customCategories, name]);
+    toast.success(`Category "${name}" added`);
+    return name;
+  };
+
+  const removeCategory = (name: string) => {
+    saveCustomCategories(customCategories.filter((c) => c !== name));
+    toast.success(`Category "${name}" removed — past expenses keep their label`);
+  };
+
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   const [activeTab, setActiveTab] = useState<Tab>("log");
   const [confirmDeleteExpenseId, setConfirmDeleteExpenseId] = useState<string | null>(null);
@@ -106,6 +152,7 @@ function ExpensesPage() {
   ];
 
   return (
+    <ExpenseUiCtx.Provider value={{ categories, customCategories, addCategory, removeCategory, onEdit: setEditingExpense }}>
     <div className="mx-auto max-w-6xl px-3 sm:px-6 py-3 sm:py-10">
       <header className="mb-4 sm:mb-8 flex flex-wrap items-center justify-between gap-4 sm:gap-6">
         <h1 className="mt-1.5 sm:mt-3 font-display text-xl sm:text-3xl font-semibold text-foreground">Expenses</h1>
@@ -222,7 +269,27 @@ function ExpensesPage() {
           }
         }}
       />
+
+      <EditExpenseDialog
+        expense={editingExpense}
+        saving={updateExpense.isPending}
+        onClose={() => setEditingExpense(null)}
+        onSave={(patch) => {
+          if (!editingExpense) return;
+          updateExpense.mutate(
+            { id: editingExpense.id, patch },
+            {
+              onSuccess: () => {
+                toast.success("Expense updated");
+                setEditingExpense(null);
+              },
+              onError: (err) => toast.error(err.message || "Couldn't update expense"),
+            }
+          );
+        }}
+      />
     </div>
+    </ExpenseUiCtx.Provider>
   );
 }
 
@@ -350,23 +417,7 @@ function LogTab({
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Category</label>
-          <div className="flex flex-wrap gap-2">
-            {EXPENSE_CATEGORIES.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setCategory(c.value)}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs transition",
-                  category === c.value
-                    ? "border-primary/50 bg-primary/15 text-foreground"
-                    : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {c.value}
-              </button>
-            ))}
-          </div>
+          <CategoryPicker value={category} onChange={setCategory} />
         </div>
 
         <div className="space-y-1.5">
@@ -410,10 +461,11 @@ function LogTab({
 }
 
 function ExpenseRow({ e, showTime, showDate, onDelete, disabled }: { e: Expense; showTime?: boolean; showDate?: boolean; onDelete: () => void; disabled?: boolean }) {
+  const { onEdit } = useExpenseUi();
   const d = new Date(e.occurred_at);
   return (
     <li className="group flex items-center gap-3 py-2.5">
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onEdit(e)}>
         <p className="truncate text-sm font-medium text-foreground">{e.note || e.category}</p>
         <p className="text-[11px] text-muted-foreground">
           {e.category}
@@ -424,6 +476,14 @@ function ExpenseRow({ e, showTime, showDate, onDelete, disabled }: { e: Expense;
       <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
         {money(Number(e.amount))} <span className="text-[11px] font-normal text-muted-foreground">{CURRENCY}</span>
       </p>
+      <button
+        type="button"
+        onClick={() => onEdit(e)}
+        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition hover:bg-primary/10 hover:text-primary sm:opacity-0 sm:group-hover:opacity-100"
+        title="Edit expense"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
       <button
         type="button"
         onClick={onDelete}
@@ -909,10 +969,17 @@ function PlannedTab({
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [cat, setCat] = useState("Shopping");
+  const { categories } = useExpenseUi();
+  // Every category the user can budget: built-in + their own + any that already has a budget
+  const budgetCategories = useMemo(() => {
+    const out = [...categories];
+    for (const c of Object.keys(categoryBudgets)) if (!out.includes(c)) out.push(c);
+    return out;
+  }, [categories, categoryBudgets]);
 
   const startEdit = () => {
     const d: Record<string, string> = {};
-    EXPENSE_CATEGORIES.forEach((c) => (d[c.value] = categoryBudgets[c.value] ? String(categoryBudgets[c.value]) : ""));
+    budgetCategories.forEach((c) => (d[c] = categoryBudgets[c] ? String(categoryBudgets[c]) : ""));
     setDraft(d);
     setEditing(true);
   };
@@ -971,11 +1038,11 @@ function PlannedTab({
         {editing ? (
           <div className="space-y-3">
             <div className="divide-y divide-white/5">
-              {EXPENSE_CATEGORIES.map((c) => (
-                <div key={c.value} className="flex items-center justify-between gap-3 py-2">
+              {budgetCategories.map((c) => (
+                <div key={c} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{c.value}</p>
-                    <p className="text-[11px] text-muted-foreground">Spent this month: {money(spentByCategory[c.value] ?? 0, 0)}</p>
+                    <p className="text-sm font-medium text-foreground">{c}</p>
+                    <p className="text-[11px] text-muted-foreground">Spent this month: {money(spentByCategory[c] ?? 0, 0)}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Input
@@ -983,8 +1050,8 @@ function PlannedTab({
                       min="0"
                       step="1"
                       inputMode="decimal"
-                      value={draft[c.value] ?? ""}
-                      onChange={(e) => setDraft({ ...draft, [c.value]: e.target.value })}
+                      value={draft[c] ?? ""}
+                      onChange={(e) => setDraft({ ...draft, [c]: e.target.value })}
                       placeholder="No limit"
                       className="h-9 w-28 text-right text-sm"
                     />
@@ -1067,8 +1134,8 @@ function PlannedTab({
             onChange={(e) => setCat(e.target.value)}
             className="h-10 rounded-md border border-white/10 bg-background px-2 text-sm text-foreground"
           >
-            {EXPENSE_CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>{c.value}</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
           <Button type="submit" className="col-span-2 sm:col-span-1 h-10 gap-1.5">
@@ -1114,5 +1181,187 @@ function PlannedTab({
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Category picker (built-in + custom categories) ─────────────────────────
+
+function CategoryPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  const { categories, customCategories, addCategory, removeCategory } = useExpenseUi();
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const list = categories.includes(value) || !value ? categories : [...categories, value];
+
+  const submit = () => {
+    const created = addCategory(draft);
+    if (created) onChange(created);
+    setDraft("");
+    setAdding(false);
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {list.map((c) => {
+        const isCustom = customCategories.includes(c);
+        const selected = value === c;
+        return (
+          <span
+            key={c}
+            className={cn(
+              "group/chip flex items-center rounded-full border text-xs transition",
+              selected ? "border-primary/50 bg-primary/15 text-foreground" : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <button type="button" onClick={() => onChange(c)} className={cn("py-1.5 pl-3", isCustom ? "pr-1.5" : "pr-3")}>
+              {c}
+            </button>
+            {isCustom && (
+              <button
+                type="button"
+                onClick={() => {
+                  removeCategory(c);
+                  if (selected) onChange(categories[0]);
+                }}
+                className="mr-1.5 rounded-full p-0.5 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover/chip:opacity-100"
+                title={`Remove "${c}"`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </span>
+        );
+      })}
+
+      {adding ? (
+        <span className="flex items-center gap-1 rounded-full border border-primary/40 bg-background px-2 py-0.5">
+          <input
+            autoFocus
+            value={draft}
+            maxLength={40}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              } else if (e.key === "Escape") {
+                setDraft("");
+                setAdding(false);
+              }
+            }}
+            placeholder="New category"
+            className="w-28 bg-transparent px-1 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          />
+          <button type="button" onClick={submit} className="rounded-full p-0.5 text-primary hover:bg-primary/10" title="Add">
+            <Check className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" onClick={() => { setDraft(""); setAdding(false); }} className="rounded-full p-0.5 text-muted-foreground hover:text-foreground" title="Cancel">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1 rounded-full border border-dashed border-white/20 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add category
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Edit an existing expense ────────────────────────────────────────────────
+
+function EditExpenseDialog({
+  expense,
+  saving,
+  onClose,
+  onSave,
+}: {
+  expense: Expense | null;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (patch: { amount?: number; category?: string; note?: string; occurred_at?: string }) => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState("");
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+
+  // Load the expense into the form whenever a different one is opened
+  if (expense && expense.id !== loadedId) {
+    setLoadedId(expense.id);
+    setAmount(String(Number(expense.amount)));
+    setCategory(expense.category);
+    setNote(expense.note ?? "");
+    setDate(format(new Date(expense.occurred_at), "yyyy-MM-dd"));
+  }
+  if (!expense && loadedId !== null) setLoadedId(null);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expense) return;
+    const n = parseFloat(amount);
+    if (!n || n <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    // Keep the original time of day, change only the date
+    const original = new Date(expense.occurred_at);
+    const [y, m, d] = date.split("-").map(Number);
+    const when = new Date(original);
+    if (y && m && d) when.setFullYear(y, m - 1, d);
+    if (when > new Date()) {
+      toast.error("The date can't be in the future");
+      return;
+    }
+    onSave({ amount: n, category, note: note.trim(), occurred_at: when.toISOString() });
+  };
+
+  return (
+    <Dialog open={expense !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl w-[calc(100vw-2rem)] sm:max-w-md p-5 sm:p-6">
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg font-bold text-foreground">Edit expense</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-5">
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-11 text-base"
+                autoFocus
+              />
+              <div className="grid h-11 place-items-center rounded-md border border-border px-3 text-sm font-semibold text-muted-foreground">{CURRENCY}</div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</label>
+              <CategoryPicker value={category} onChange={setCategory} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Note</label>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did you buy? (optional)" className="h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Date</label>
+              <Input type="date" value={date} max={format(new Date(), "yyyy-MM-dd")} onChange={(e) => setDate(e.target.value)} className="h-10" />
+            </div>
+          </div>
+          <DialogFooter className="flex-row justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose} className="h-9 rounded-xl text-xs">Cancel</Button>
+            <Button type="submit" size="sm" disabled={saving} className="h-9 rounded-xl px-4 text-xs font-semibold">
+              {saving && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />} Save changes
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
