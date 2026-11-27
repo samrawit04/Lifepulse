@@ -15,6 +15,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PlannedPurchase> PlannedPurchases => Set<PlannedPurchase>();
     public DbSet<CategoryBudget> CategoryBudgets => Set<CategoryBudget>();
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
+    public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -187,6 +189,30 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.Key).HasMaxLength(100).IsRequired();
             e.Property(s => s.Value).HasColumnType("text").IsRequired();
             e.HasIndex(s => new { s.UserId, s.Key }).IsUnique();
+        });
+
+        // ── AI assistant chat history ───────────────────────────────────────
+        model.Entity<ChatConversation>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.HasOne(c => c.User)
+             .WithMany(u => u.ChatConversations)
+             .HasForeignKey(c => c.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.Property(c => c.Title).HasMaxLength(120).IsRequired();
+            e.HasIndex(c => new { c.UserId, c.UpdatedAt });
+        });
+
+        model.Entity<ChatMessage>(e =>
+        {
+            e.HasKey(m => m.Id);
+            e.HasOne(m => m.Conversation)
+             .WithMany(c => c.Messages)
+             .HasForeignKey(m => m.ConversationId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.Property(m => m.Role).HasMaxLength(10).IsRequired();
+            e.Property(m => m.Text).HasColumnType("text").IsRequired();
+            e.HasIndex(m => new { m.ConversationId, m.CreatedAt });
         });
     }
 

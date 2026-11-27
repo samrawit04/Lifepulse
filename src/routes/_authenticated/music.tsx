@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useUserSetting } from "@/hooks/use-user-setting";
+import { Discover } from "@/components/watch/discover";
 import { createPortal } from "react-dom";
 import { useMusicPlayer, type VideoInfo } from "@/lib/music-player-context";
 import { apiClient, type Playlist, type PlaylistItem } from "@/integrations/api/client";
@@ -39,8 +39,8 @@ export const Route = createFileRoute("/_authenticated/music")({
   component: MusicPage,
   head: () => ({
     meta: [
-      { title: "Music & Focus · LifePulse" },
-      { name: "description", content: "Ambient music player and focus playlist manager." },
+      { title: "Watch · LifePulse" },
+      { name: "description", content: "Podcasts, music and documentaries picked for your growth." },
     ],
   }),
 });
@@ -119,15 +119,6 @@ async function fetchRecommendations(apiKey: string, seeds: string[], exclude: st
   }
   return out;
 }
-
-const DEFAULT_QUICK_WORDS = [
-  "Lofi Hip Hop",
-  "Jazz Rain Ambience",
-  "Deep Focus Techno",
-  "coders music",
-  "holy song ethiopia",
-  "podcasts"
-];
 
 // ─── Add-to-playlist portal popover ──────────────────────────────────────────
 function AddToPlaylistButton({
@@ -308,31 +299,9 @@ function MusicPage() {
   const [liked, setLiked] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Editable Quick Search Suggestions (saved to your account)
-  const { value: quickWords, save: saveQuickWords } = useUserSetting<string[]>(
-    "music-quick-words",
-    DEFAULT_QUICK_WORDS
-  );
-  const [isAddingWord, setIsAddingWord] = useState(false);
-  const [newWordInput, setNewWordInput] = useState("");
-
-  const addQuickWord = (word: string) => {
-    const trimmed = word.trim();
-    if (!trimmed) return;
-    if (quickWords.includes(trimmed)) {
-      toast.info("This quick suggestion already exists!");
-      return;
-    }
-    saveQuickWords([...quickWords, trimmed]);
-  };
-
-  const removeQuickWord = (wordToRemove: string) => {
-    saveQuickWords(quickWords.filter((w) => w !== wordToRemove));
-  };
-
   const youtubeApiKey = import.meta.env.VITE_YOUTUBE_API_KEY || "";
 
-  // Seeds for "For You": artists from your playlist, then what's playing, then a quick word
+  // Seeds for "Picked for you": artists from your playlist, then what's playing
   const recommendationSeeds = useMemo(() => {
     const channels: string[] = [];
     const sorted = [...playlistItems].sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
@@ -344,11 +313,8 @@ function MusicPage() {
     if (channels.length < 2 && currentVideo?.channelName && !channels.includes(currentVideo.channelName)) {
       channels.push(currentVideo.channelName);
     }
-    if (channels.length < 2 && quickWords[0] && !channels.includes(quickWords[0])) {
-      channels.push(quickWords[0]);
-    }
     return channels.slice(0, 2);
-  }, [playlistItems, currentVideo?.channelName, quickWords]);
+  }, [playlistItems, currentVideo?.channelName]);
 
   const excludeIds = useMemo(() => playlistItems.map((i) => i.videoId), [playlistItems]);
 
@@ -586,7 +552,7 @@ function MusicPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-white/5 px-4 sm:px-6 py-3 sm:py-4 bg-background/40 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3 w-full md:w-auto">
           <div className="flex items-center gap-3">
-            <h1 className="font-display text-xl sm:text-3xl font-semibold text-foreground">Music & Focus</h1>
+            <h1 className="font-display text-xl sm:text-3xl font-semibold text-foreground">Watch</h1>
           </div>
 
           <Button
@@ -607,7 +573,7 @@ function MusicPage() {
             <Search className="absolute left-3 text-muted-foreground h-4 w-4 pointer-events-none shrink-0" />
             <input
               type="text"
-              placeholder="Search YouTube music, artists, lofi, rain..."
+              placeholder="Search podcasts, music, documentaries…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-10 w-full rounded-l-xl border border-white/10 bg-white/[0.04] pl-9 pr-8 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/30 transition"
@@ -637,83 +603,6 @@ function MusicPage() {
           <FolderPlus className="h-3.5 w-3.5" /> New Playlist
         </Button>
       </header>
-
-      {/* ── Quick Search Chips ── */}
-      <div className="flex items-center gap-2 overflow-x-auto px-6 py-3 border-b border-white/5 scrollbar-none">
-        <span className="text-xs font-medium text-muted-foreground mr-2 shrink-0">
-          Quick:
-        </span>
-        {quickWords.map((tag) => (
-          <span
-            key={tag}
-            className={cn(
-              "flex items-center gap-1 shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
-              searchQuery === tag
-                ? "border-primary/40 bg-primary/20 text-primary"
-                : "border-white/10 bg-white/5 text-muted-foreground hover:border-white/20 hover:text-foreground"
-            )}
-          >
-            <button
-              onClick={() => { setSearchQuery(tag); handleSearch(tag); }}
-              className="whitespace-nowrap hover:text-primary transition"
-            >
-              {tag}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                removeQuickWord(tag);
-              }}
-              className="ml-1 rounded-full p-0.5 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
-              title={`Remove "${tag}"`}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-
-        {/* Inline Add Form */}
-        {isAddingWord ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              addQuickWord(newWordInput);
-              setNewWordInput("");
-              setIsAddingWord(false);
-            }}
-            className="flex items-center gap-1.5 shrink-0 rounded-full border border-primary/30 bg-white/5 px-2.5 py-0.5"
-          >
-            <input
-              type="text"
-              value={newWordInput}
-              onChange={(e) => setNewWordInput(e.target.value)}
-              placeholder="New quick tag..."
-              className="bg-transparent border-none text-xs text-foreground focus:outline-none w-28 px-1 placeholder:text-muted-foreground/50"
-              autoFocus
-            />
-            <button type="submit" className="text-emerald-500 hover:text-emerald-400 p-0.5 rounded-full">
-              <Check className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsAddingWord(false);
-                setNewWordInput("");
-              }}
-              className="text-destructive hover:text-destructive/80 p-0.5 rounded-full"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </form>
-        ) : (
-          <button
-            onClick={() => setIsAddingWord(true)}
-            className="flex items-center gap-1 shrink-0 rounded-full border border-dashed border-white/20 bg-transparent px-3 py-1 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-white/5 transition"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add
-          </button>
-        )}
-      </div>
 
       {!youtubeApiKey && (
         <div className="mx-6 mt-4 flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-200">
@@ -747,7 +636,7 @@ function MusicPage() {
                   {tab === "player" && <Tv className="h-4 w-4" />}
                   {tab === "search" && <Search className="h-4 w-4" />}
                   {tab === "foryou" && <Sparkles className="h-4 w-4" />}
-                  <span>{tab === "player" ? "Active Player" : tab === "search" ? "Search Results" : "For You"}</span>
+                  <span>{tab === "player" ? "Now Playing" : tab === "search" ? "Search Results" : "Discover"}</span>
                   {tab === "player" && currentVideo && (
                     <span className="flex h-2 w-2 relative">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
@@ -779,7 +668,7 @@ function MusicPage() {
                     <div>
                       <h2 className="text-xl font-bold text-foreground">Select a video or playlist</h2>
                       <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-                        Pick something from For You or search for a track to start listening.
+                        Pick something from Discover or search to start watching.
                       </p>
                     </div>
                   </div>
@@ -905,76 +794,35 @@ function MusicPage() {
                 FOR YOU (recommendations) TAB
             ───────────────────────────────────────────────── */}
             {activeMainTab === "foryou" && (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-                  <div>
-                    <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" /> Recommended for you
-                    </h2>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {recommendationSeeds.length > 0
-                        ? `Based on ${recommendationSeeds.join(" & ")} and what's trending`
-                        : "Trending music right now — add songs to a playlist to personalise this"}
-                    </p>
-                  </div>
-                  {youtubeApiKey && (
-                    <button
-                      onClick={() => recommendations.refetch()}
-                      disabled={recommendations.isFetching}
-                      className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-white/10 transition disabled:opacity-50"
-                    >
-                      <RefreshCw className={cn("h-3.5 w-3.5", recommendations.isFetching && "animate-spin")} />
-                      Refresh
-                    </button>
+              youtubeApiKey ? (
+                <Discover
+                  apiKey={youtubeApiKey}
+                  activeVideoId={currentVideo?.videoId ?? null}
+                  onPlay={(video, queueVideos) => {
+                    play(video, queueVideos);
+                    setActiveMainTab("player");
+                  }}
+                  renderActions={(video) => (
+                    <AddToPlaylistButton video={video} playlists={playlists} onAdd={handleAddToPlaylist} />
                   )}
+                  pickedForYou={{
+                    videos: recommendations.data ?? [],
+                    loading: recommendations.isLoading,
+                    subtitle:
+                      recommendationSeeds.length > 0
+                        ? `Based on ${recommendationSeeds.join(" & ")} and what's trending`
+                        : "Trending music right now — save videos to a playlist to personalise this",
+                  }}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center glass-card rounded-2xl">
+                  <Compass className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                  <h3 className="text-base font-bold text-foreground">Discover needs a YouTube API key</h3>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                    Add VITE_YOUTUBE_API_KEY to your .env to browse podcasts, music and documentaries here.
+                  </p>
                 </div>
-
-                {!youtubeApiKey ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center glass-card rounded-2xl">
-                    <Compass className="h-12 w-12 text-muted-foreground/30 mb-3" />
-                    <h3 className="text-base font-bold text-foreground">Recommendations need a YouTube API key</h3>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                      Add VITE_YOUTUBE_API_KEY to your .env to see personalised picks here.
-                    </p>
-                  </div>
-                ) : recommendations.isLoading ? (
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <div key={i} className="aspect-video rounded-2xl border border-white/5 bg-white/[0.04] animate-pulse" />
-                    ))}
-                  </div>
-                ) : recommendations.isError || (recommendations.data ?? []).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center glass-card rounded-2xl">
-                    <Headphones className="h-12 w-12 text-muted-foreground/30 mb-3" />
-                    <h3 className="text-base font-bold text-foreground">No recommendations right now</h3>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                      Try refreshing, or search for something above.
-                    </p>
-                    <button
-                      onClick={() => recommendations.refetch()}
-                      className="mt-3 flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary"
-                    >
-                      {recommendations.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                      Try again
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {(recommendations.data ?? []).map((video) => (
-                      <VideoCard
-                        key={video.videoId}
-                        video={video}
-                        isActive={currentVideo?.videoId === video.videoId}
-                        isPlaying={isPlaying}
-                        playlists={playlists}
-                        onPlay={() => handlePlayTrack(video)}
-                        onAdd={handleAddToPlaylist}
-                        badge={video.reason}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+              )
             )}
           </div>
 

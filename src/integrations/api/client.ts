@@ -56,6 +56,22 @@ export interface PinterestSearchResponse {
   hasMore: boolean;
 }
 
+export interface ChatConversation {
+  id: string;
+  title: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StoredChatMessage {
+  id: string;
+  conversation_id: string;
+  role: "user" | "model";
+  text: string;
+  created_at: string;
+}
+
 export interface AppNotification {
   id: string;
   userId: string;
@@ -263,6 +279,19 @@ class ApiClient {
       const res = await this.put<{ key: string; value: T }>(`/api/settings/${encodeURIComponent(key)}`, { value });
       return res.value;
     },
+  };
+
+  // AI assistant chat history
+  chats = {
+    list: (): Promise<ChatConversation[]> => this.get<ChatConversation[]>("/api/chats"),
+    create: (title?: string): Promise<ChatConversation> => this.post<ChatConversation>("/api/chats", { title }),
+    rename: (id: string, title: string): Promise<ChatConversation> => this.patch<ChatConversation>(`/api/chats/${id}`, { title }),
+    delete: (id: string): Promise<void> => this.delete<void>(`/api/chats/${id}`),
+    messages: (id: string): Promise<StoredChatMessage[]> => this.get<StoredChatMessage[]>(`/api/chats/${id}/messages`),
+    addMessage: (id: string, role: "user" | "model", text: string): Promise<StoredChatMessage> =>
+      this.post<StoredChatMessage>(`/api/chats/${id}/messages`, { role, text }),
+    recentMessages: (limit = 30): Promise<StoredChatMessage[]> =>
+      this.get<StoredChatMessage[]>(`/api/chats/recent-messages?limit=${limit}`),
   };
 
   // Playlists Operations
