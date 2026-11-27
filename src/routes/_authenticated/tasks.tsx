@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Clock,
   CalendarDays,
+  CalendarPlus,
   CalendarOff,
   Pencil,
   Pin,
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { format, isAfter, isBefore, isToday, startOfDay } from "date-fns";
+import { TASK_ACTIVE_TAG, TASK_CALENDAR_TAG, hasTag, isActiveTask, withTag, withoutTag } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
@@ -74,6 +76,8 @@ function TasksPage() {
   const [editStartTime, setEditStartTime] = useState("");
   const [editEndTime, setEditEndTime] = useState("");
   const [editPinned, setEditPinned] = useState(false);
+  const [editOnCalendar, setEditOnCalendar] = useState(false);
+  const [onCalendar, setOnCalendar] = useState(false);
 
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [activeDropTarget, setActiveDropTarget] = useState<ColumnId | null>(null);
@@ -98,10 +102,7 @@ function TasksPage() {
       tasks
         .filter((t) => {
           if (t.completed) return false;
-          if (!t.due_date) return true;
-          const due = startOfDay(new Date(t.due_date));
-          const today = startOfDay(new Date());
-          return isAfter(due, today);
+          return !isActiveTask(t);
         })
         .sort(sortByDue),
     [tasks]
@@ -111,10 +112,8 @@ function TasksPage() {
     () =>
       tasks
         .filter((t) => {
-          if (t.completed || !t.due_date) return false;
-          const due = startOfDay(new Date(t.due_date));
-          const today = startOfDay(new Date());
-          return isToday(new Date(t.due_date)) || isBefore(due, today);
+          if (t.completed) return false;
+          return isActiveTask(t);
         })
         .sort(sortByDue),
     [tasks]
@@ -128,7 +127,8 @@ function TasksPage() {
   const openModal = (col: ColumnId = "backlog") => {
     setTargetColumn(col);
     setTitle("");
-    setDue(col === "today" ? format(new Date(), "yyyy-MM-dd") : "");
+    setDue("");
+    setOnCalendar(false);
     setPriority("medium");
     setStartTime("");
     setEndTime("");
@@ -145,6 +145,7 @@ function TasksPage() {
     setEditStartTime(task.start_at ? format(new Date(task.start_at), "HH:mm") : "");
     setEditEndTime(task.end_at ? format(new Date(task.end_at), "HH:mm") : "");
     setEditPinned(task.pinned);
+    setEditOnCalendar(hasTag(task, TASK_CALENDAR_TAG));
   };
 
   const submit = (e: React.FormEvent) => {
@@ -162,9 +163,6 @@ function TasksPage() {
       // A time was picked without a date → schedule it for today.
       targetDue = new Date().toISOString();
     }
-    if (targetColumn === "today" && !due) {
-      targetDue = new Date().toISOString();
-    }
 
     create.mutate(
       {
@@ -176,6 +174,10 @@ function TasksPage() {
         end_at: timeWindow.end_at,
         pinned,
         completed: false,
+        tags: [
+          ...(targetColumn === "today" ? [TASK_ACTIVE_TAG] : []),
+          ...(onCalendar && targetDue ? [TASK_CALENDAR_TAG] : []),
+        ],
       },
       {
         onSuccess: () => {
@@ -213,6 +215,7 @@ function TasksPage() {
       start_at: timeWindow.start_at,
       end_at: timeWindow.end_at,
       pinned: editPinned,
+      tags: editOnCalendar && dueIso ? withTag(editingTask.tags, TASK_CALENDAR_TAG) : withoutTag(editingTask.tags, TASK_CALENDAR_TAG),
     };
 
     update.mutate(
@@ -262,14 +265,11 @@ function TasksPage() {
     if (!targetItem) return;
 
     if (columnId === "done") {
-      update.mutate({ id: itemId, patch: { completed: true } });
+      update.mutate({ id: itemId, patch: { completed: true, tags: withoutTag(targetItem.tags, TASK_ACTIVE_TAG) } });
     } else if (columnId === "today") {
-      update.mutate({ id: itemId, patch: moveToTodayPatch(targetItem) });
+      update.mutate({ id: itemId, patch: moveToActivePatch(targetItem) });
     } else if (columnId === "backlog") {
-      update.mutate({
-        id: itemId,
-        patch: { completed: false, due_date: null, start_at: null, end_at: null },
-      });
+      update.mutate({ id: itemId, patch: moveToBacklogPatch(targetItem) });
     }
   };
 
@@ -296,6 +296,17 @@ function TasksPage() {
     onEdit: (t: Item) => openEditModal(t),
     onDelete: (t: Item) => setConfirmDeleteId(t.id),
     onAdd: addSubtask,
+    onToggleCalendar: (t: Item) => {
+      const on = hasTag(t, TASK_CALENDAR_TAG);
+      if (!on && !t.due_date && !t.start_at) {
+        toast.error("Give the task a date first (Edit task)");
+        return;
+      }
+      update.mutate(
+        { id: t.id, patch: { tags: on ? withoutTag(t.tags, TASK_CALENDAR_TAG) : withTag(t.tags, TASK_CALENDAR_TAG) } },
+        { onSuccess: () => toast.success(on ? "Removed from calendar" : "Added to calendar") }
+      );
+    },
   };
 
   const togglePin = (t: Item) =>
@@ -373,13 +384,13 @@ function TasksPage() {
               onDelete={(t) => setConfirmDeleteId(t.id)}
               onEdit={openEditModal}
               onTogglePin={togglePin}
-              onMoveToToday={(t) => update.mutate({ id: t.id, patch: moveToTodayPatch(t) })}
+              onMoveToToday={(t) => update.mutate({ id: t.id, patch: moveToActivePatch(t) })}
               onAddTask={() => openModal("backlog")}
             />
 
             <KanbanColumn
               columnId="today"
-              title="Today & Overdue"
+              title="Active"
               icon={<CalendarDays className="h-4 w-4 text-primary" />}
               tasks={todayTasks}
               isActiveDrop={activeDropTarget === "today"}
@@ -392,7 +403,7 @@ function TasksPage() {
               onDelete={(t) => setConfirmDeleteId(t.id)}
               onEdit={openEditModal}
               onTogglePin={togglePin}
-              onMoveToBacklog={(t) => update.mutate({ id: t.id, patch: { completed: false, due_date: null, start_at: null, end_at: null } })}
+              onMoveToBacklog={(t) => update.mutate({ id: t.id, patch: moveToBacklogPatch(t) })}
               onAddTask={() => openModal("today")}
             />
 
@@ -424,7 +435,7 @@ function TasksPage() {
             {todayTasks.length > 0 && (
               <div>
                 <h2 className="mb-2 text-sm font-semibold text-primary flex items-center gap-1.5">
-                  <CalendarDays className="h-4 w-4" /> Today & Overdue ({todayTasks.length})
+                  <CalendarDays className="h-4 w-4" /> Active ({todayTasks.length})
                 </h2>
                 <div className="space-y-2">
                   {todayTasks.map((t) => (
@@ -498,7 +509,7 @@ function TasksPage() {
           <form onSubmit={submit}>
             <DialogHeader>
               <DialogTitle className="font-display text-lg font-bold text-foreground">
-                {targetColumn === "today" ? "Add Task to Today's Focus" : "Add New Task"}
+                {targetColumn === "today" ? "Add an Active Task" : "Add New Task"}
               </DialogTitle>
             </DialogHeader>
             <div className="py-5 space-y-4">
@@ -548,6 +559,7 @@ function TasksPage() {
               />
 
               <PinToggle checked={pinned} onChange={setPinned} />
+              <CalendarToggle checked={onCalendar} onChange={setOnCalendar} hasDate={Boolean(due || startTime)} />
 
             </div>
             <DialogFooter className="gap-2 sm:gap-2 pt-2">
@@ -630,6 +642,7 @@ function TasksPage() {
               />
 
               <PinToggle checked={editPinned} onChange={setEditPinned} />
+              <CalendarToggle checked={editOnCalendar} onChange={setEditOnCalendar} hasDate={Boolean(editDue || editStartTime)} />
 
             </div>
 
@@ -672,6 +685,7 @@ type TaskTree = {
   onEdit: (t: Item) => void;
   onDelete: (t: Item) => void;
   onAdd: (parent: Item, title: string) => void;
+  onToggleCalendar: (t: Item) => void;
 };
 
 const TaskTreeCtx = createContext<TaskTree | null>(null);
@@ -868,6 +882,12 @@ function TaskCard({
             </span>
           )}
 
+          {hasTag(task, TASK_CALENDAR_TAG) && (task.due_date || task.start_at) && (
+            <span className="flex items-center gap-1 rounded-md bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+              <CalendarPlus className="h-2.5 w-2.5" /> On calendar
+            </span>
+          )}
+
           {task.priority && (
             <span
               className={cn(
@@ -907,7 +927,7 @@ function TaskCard({
         </div>
       </div>
 
-      <div className="flex items-center opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 shrink-0 gap-0.5">
+      <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity sm:pointer-events-none sm:absolute sm:right-2 sm:top-2 sm:rounded-lg sm:border sm:border-border sm:bg-card sm:px-0.5 sm:opacity-0 sm:shadow-md sm:group-hover:pointer-events-auto sm:group-hover:opacity-100">
         {!task.completed && (
           <button
             onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
@@ -931,6 +951,18 @@ function TaskCard({
             <ListPlus className="h-3 w-3" />
           </button>
         )}
+        {!task.completed && (
+          <button
+            onClick={(e) => { e.stopPropagation(); tree?.onToggleCalendar(task); }}
+            className={cn(
+              "rounded p-1 transition",
+              hasTag(task, TASK_CALENDAR_TAG) ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+            )}
+            title={hasTag(task, TASK_CALENDAR_TAG) ? "Remove from calendar" : "Add to calendar"}
+          >
+            <CalendarPlus className="h-3 w-3" />
+          </button>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
           className="rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary transition"
@@ -942,7 +974,7 @@ function TaskCard({
           <button
             onClick={(e) => { e.stopPropagation(); onMoveToToday(); }}
             className="rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary transition"
-            title="Move to Today's Focus"
+            title="Start working on it (move to Active)"
           >
             <CalendarDays className="h-3 w-3" />
           </button>
@@ -1048,21 +1080,21 @@ function sortByDue(a: Item, b: Item) {
   return aKey < bKey ? -1 : 1;
 }
 
-/** Move a task to today, keeping its time-of-day window (if any). */
-function moveToTodayPatch(t: Item): ItemUpdate {
-  const shift = (iso: string | null) => {
-    if (!iso) return null;
-    const src = new Date(iso);
-    const d = new Date();
-    d.setHours(src.getHours(), src.getMinutes(), 0, 0);
-    return d.toISOString();
-  };
-  return {
-    completed: false,
-    due_date: new Date().toISOString(),
-    start_at: shift(t.start_at),
-    end_at: shift(t.end_at),
-  };
+/** Start working on a task. Its deadline (if any) stays exactly as you set it. */
+function moveToActivePatch(t: Item): ItemUpdate {
+  return { completed: false, tags: withTag(t.tags, TASK_ACTIVE_TAG) };
+}
+
+/** Put a task back in the list. A deadline that already arrived is cleared so it doesn't jump back to Active. */
+function moveToBacklogPatch(t: Item): ItemUpdate {
+  const patch: ItemUpdate = { completed: false, tags: withoutTag(t.tags, TASK_ACTIVE_TAG) };
+  if (t.due_date && !isAfter(startOfDay(new Date(t.due_date)), startOfDay(new Date()))) {
+    patch.due_date = null;
+    patch.start_at = null;
+    patch.end_at = null;
+    patch.tags = withoutTag(patch.tags, TASK_CALENDAR_TAG);
+  }
+  return patch;
 }
 
 /**
@@ -1136,6 +1168,27 @@ function TimeWindowFields({
         </button>
       )}
     </div>
+  );
+}
+
+function CalendarToggle({ checked, onChange, hasDate }: { checked: boolean; onChange: (v: boolean) => void; hasDate: boolean }) {
+  return (
+    <label
+      className={cn(
+        "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition",
+        !hasDate ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+        checked && hasDate ? "border-primary/50 bg-primary/10" : "border-input bg-background hover:bg-accent/30"
+      )}
+    >
+      <Checkbox checked={checked && hasDate} disabled={!hasDate} onCheckedChange={(v) => onChange(v === true)} className="h-4 w-4" />
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+          <CalendarPlus className={cn("h-3.5 w-3.5", checked && hasDate ? "text-primary" : "text-muted-foreground")} />
+          Add to my calendar
+        </p>
+        <p className="text-[11px] text-muted-foreground">{hasDate ? "Shows this task on your calendar at its date and time." : "Pick a due date or a time first."}</p>
+      </div>
+    </label>
   );
 }
 

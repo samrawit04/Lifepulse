@@ -6,7 +6,7 @@ import {
 } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useCreateItem, useDeleteItem, useFolders, useItems, useUpdateItem } from "@/hooks/use-lifeos";
-import type { Item } from "@/lib/lifeos-types";
+import { TASK_CALENDAR_TAG, hasTag, type Item } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,7 +58,7 @@ function CalendarPage() {
   const upcomingEvents = useMemo(() => {
     const now = new Date();
     return items
-      .filter((i) => !i.archived && ((i.type === "event" && i.event_date && new Date(i.event_date) >= now) || (i.type === "task" && !i.completed && i.due_date && new Date(i.due_date) >= now)))
+      .filter((i) => !i.archived && ((i.type === "event" && i.event_date && new Date(i.event_date) >= now) || (i.type === "task" && hasTag(i, TASK_CALENDAR_TAG) && !i.completed && i.due_date && new Date(i.due_date) >= now)))
       .sort((a, b) => {
         const dtA = itemTiming(a)?.start.getTime() ?? 0;
         const dtB = itemTiming(b)?.start.getTime() ?? 0;
@@ -320,7 +320,8 @@ function itemTiming(i: Item): Timing | null {
     const end = i.end_at ? new Date(i.end_at) : addMinutes(start, DEFAULT_EVENT_MINUTES);
     return { start, end, allDay: false, hasEnd: Boolean(i.end_at) };
   }
-  if (i.type === "task") {
+  // Tasks appear only when the user chose "Add to my calendar"
+  if (i.type === "task" && hasTag(i, TASK_CALENDAR_TAG)) {
     if (i.start_at) {
       const start = new Date(i.start_at);
       const end = i.end_at ? new Date(i.end_at) : addMinutes(start, DEFAULT_TASK_MINUTES);

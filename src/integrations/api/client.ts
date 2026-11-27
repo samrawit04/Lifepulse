@@ -50,6 +50,23 @@ export interface PinterestPin {
   sourceDomain: string | null;
 }
 
+export interface GutenbergBook {
+  id: number;
+  title: string;
+  authors: string[];
+  cover: string | null;
+  subjects: string[];
+  downloads: number;
+  summary: string | null;
+  has_text: boolean;
+}
+
+export interface BookSearchResponse {
+  books: GutenbergBook[];
+  count: number;
+  next_page: number | null;
+}
+
 export interface AdminDayCount {
   date: string;
   count: number;
@@ -477,6 +494,17 @@ class ApiClient {
   };
 
   // ── Pinterest Operations ────────────────────────────────────────────────────
+  books = {
+    search: (params: { q?: string; topic?: string; page?: number }): Promise<BookSearchResponse> => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set("q", params.q);
+      if (params.topic) qs.set("topic", params.topic);
+      qs.set("page", String(params.page ?? 1));
+      return this.get<BookSearchResponse>(`/api/books/search?${qs}`);
+    },
+    text: (id: number): Promise<{ id: number; text: string }> => this.get<{ id: number; text: string }>(`/api/books/${id}/text`),
+  };
+
   admin = {
     me: (): Promise<{ is_admin: boolean }> => this.get<{ is_admin: boolean }>("/api/admin/me"),
     stats: (): Promise<AdminStats> => this.get<AdminStats>("/api/admin/stats"),
