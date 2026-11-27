@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import type { VideoInfo } from "@/lib/music-player-context";
 import { useUserSetting } from "@/hooks/use-user-setting";
@@ -12,73 +12,103 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 
 // ─── Topics ──────────────────────────────────────────────────────────────────
 
-export const TOPIC_GROUPS = ["Podcasts", "Learning", "Documentaries", "Music", "Entertainment", "My topics"] as const;
-export type TopicGroup = (typeof TOPIC_GROUPS)[number];
-
-export type WatchTopic = {
+/**
+ * A topic is one Netflix-style row. Its keywords are searched separately and the
+ * results are mixed together, so "Podcasts" shows self-development, career,
+ * psychology… all in a single row.
+ */
+export type WatchSection = {
   id: string;
   title: string;
-  /** What we search YouTube for. */
-  query: string;
-  group: TopicGroup;
+  /** Searches mixed into this row (creators, shows, subjects). */
+  queries: string[];
   /** Prefer long-form videos (20 min+) — podcasts, documentaries. */
   long?: boolean;
+  /** Search YouTube's Music category. */
+  music?: boolean;
 };
 
-/** Suggested starting topics, focused on growth and productivity. Users can remove/add their own. */
-export const SUGGESTED_TOPICS: WatchTopic[] = [
-  { id: "self-dev", title: "Self-development", query: "Mel Robbins podcast self improvement", group: "Podcasts", long: true },
-  { id: "career", title: "Career & success", query: "The Diary of a CEO career success podcast", group: "Podcasts", long: true },
-  { id: "psychology", title: "Psychology & human nature", query: "Robert Greene psychology human nature interview", group: "Podcasts", long: true },
-  { id: "mindset", title: "Mindset & habits", query: "Jay Shetty On Purpose mindset habits podcast", group: "Podcasts", long: true },
-  { id: "productivity", title: "Productivity", query: "Ali Abdaal productivity tips", group: "Learning" },
-  { id: "ted", title: "TED talks", query: "TED talk personal growth", group: "Learning" },
-  { id: "science-docs", title: "Science & nature", query: "full documentary science nature", group: "Documentaries", long: true },
-  { id: "history-docs", title: "History", query: "full history documentary", group: "Documentaries", long: true },
-  { id: "business-docs", title: "Business & tech", query: "business technology documentary full", group: "Documentaries", long: true },
-  { id: "focus-music", title: "Focus & study", query: "lofi focus study music", group: "Music" },
-  { id: "calm-music", title: "Calm & relaxing", query: "calm relaxing instrumental music", group: "Music" },
-  { id: "comedy", title: "Stand-up comedy", query: "clean stand up comedy special", group: "Entertainment" },
-  { id: "trailers", title: "New movie trailers", query: "official movie trailer", group: "Entertainment" },
+/** Suggested starting topics, focused on growth and productivity. Users can edit everything. */
+export const SUGGESTED_SECTIONS: WatchSection[] = [
+  {
+    id: "podcasts",
+    title: "Podcasts",
+    long: true,
+    queries: [
+      "Mel Robbins podcast self improvement",
+      "The Diary of a CEO career success",
+      "Robert Greene psychology human nature",
+      "Jay Shetty On Purpose mindset habits",
+    ],
+  },
+  { id: "learning", title: "Learning", queries: ["Ali Abdaal productivity", "TED talk personal growth", "how to learn faster"] },
+  {
+    id: "documentaries",
+    title: "Documentaries",
+    long: true,
+    queries: ["full documentary science nature", "full history documentary", "business technology documentary"],
+  },
+  { id: "music", title: "Music", music: true, queries: ["lofi focus study music", "calm relaxing instrumental music"] },
+  { id: "entertainment", title: "Entertainment", queries: ["clean stand up comedy special", "official movie trailer"] },
 ];
+
+/** Shape saved by the previous version: one row per keyword with a group name. */
+type LegacyTopic = { id: string; title: string; query: string; group: string; long?: boolean };
+
+function fromLegacy(topics: LegacyTopic[]): WatchSection[] {
+  const out: WatchSection[] = [];
+  for (const t of topics) {
+    let sec = out.find((x) => x.title === t.group);
+    if (!sec) {
+      sec = { id: `s-${t.group.toLowerCase().replace(/\W+/g, "-")}`, title: t.group, queries: [], long: false, music: t.group === "Music" };
+      out.push(sec);
+    }
+    if (!sec.queries.includes(t.query)) sec.queries.push(t.query);
+    if (t.long) sec.long = true;
+  }
+  return out;
+}
 
 const NO_WORDS: string[] = [];
 
-/** User's topics (saved on their account). Falls back to suggestions + their old music quick words. */
-export function useWatchTopics() {
-  const { value: saved, hasSavedValue, isLoading, save } = useUserSetting<WatchTopic[] | null>("watch-topics", null);
+/** The user's topics, saved on their account (never only in the browser). */
+export function useWatchSections() {
+  const { value: saved, hasSavedValue, isLoading, save } = useUserSetting<WatchSection[] | null>("watch-sections", null);
+  const { value: legacy, hasSavedValue: hasLegacy } = useUserSetting<LegacyTopic[] | null>("watch-topics", null);
   const { value: oldQuickWords } = useUserSetting<string[]>("music-quick-words", NO_WORDS);
 
-  const topics = useMemo<WatchTopic[]>(() => {
+  const sections = useMemo<WatchSection[]>(() => {
     if (hasSavedValue && saved) return saved;
-    const migrated = oldQuickWords.map((w) => ({ id: `qw-${w}`, title: w, query: w, group: "My topics" as const }));
-    return [...SUGGESTED_TOPICS, ...migrated];
-  }, [hasSavedValue, saved, oldQuickWords]);
+    if (hasLegacy && legacy && legacy.length > 0) return fromLegacy(legacy);
+    const base = SUGGESTED_SECTIONS.map((x) => ({ ...x, queries: [...x.queries] }));
+    if (oldQuickWords.length > 0) base.push({ id: "my-topics", title: "My topics", queries: [...oldQuickWords] });
+    return base;
+  }, [hasSavedValue, saved, hasLegacy, legacy, oldQuickWords]);
 
   return {
-    topics,
+    sections,
     isLoading,
-    save: (next: WatchTopic[]) => save(next),
-    resetToSuggested: () => save(SUGGESTED_TOPICS),
+    save: (next: WatchSection[]) => save(next),
+    resetToSuggested: () => save(SUGGESTED_SECTIONS),
   };
 }
 
 // ─── YouTube ─────────────────────────────────────────────────────────────────
 
-type Page = { videos: VideoInfo[]; nextPageToken: string | null };
+type QueryPage = { videos: VideoInfo[]; nextPageToken: string | null };
 
-async function searchYouTube(apiKey: string, topic: WatchTopic, pageToken?: string): Promise<Page> {
+async function searchYouTube(apiKey: string, q: string, sec: WatchSection, max: number, pageToken?: string): Promise<QueryPage> {
   const params = new URLSearchParams({
     part: "snippet",
     type: "video",
-    maxResults: "12",
-    q: topic.query,
+    maxResults: String(max),
+    q,
     safeSearch: "moderate",
     videoEmbeddable: "true",
     key: apiKey,
   });
-  if (topic.long) params.set("videoDuration", "long");
-  if (topic.group === "Music") params.set("videoCategoryId", "10");
+  if (sec.long) params.set("videoDuration", "long");
+  if (sec.music) params.set("videoCategoryId", "10");
   if (pageToken) params.set("pageToken", pageToken);
 
   const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
@@ -100,6 +130,29 @@ async function searchYouTube(apiKey: string, topic: WatchTopic, pageToken?: stri
       })),
     nextPageToken: data.nextPageToken ?? null,
   };
+}
+
+/** Page tokens per keyword; a keyword with `null` has no more results. */
+type Cursor = Record<string, string | null>;
+type MixedPage = { videos: VideoInfo[]; cursor: Cursor };
+
+/** Fetch every keyword of a topic in parallel and interleave the results into one list. */
+async function fetchMixed(apiKey: string, sec: WatchSection, cursor: Cursor | null): Promise<MixedPage> {
+  const queries = cursor ? sec.queries.filter((q) => cursor[q]) : sec.queries;
+  const perQuery = Math.max(4, Math.min(10, Math.ceil(20 / Math.max(1, sec.queries.length))));
+  const settled = await Promise.allSettled(queries.map((q) => searchYouTube(apiKey, q, sec, perQuery, cursor?.[q] ?? undefined)));
+
+  const ok = settled.filter((r): r is PromiseFulfilledResult<QueryPage> => r.status === "fulfilled");
+  if (ok.length === 0 && settled.length > 0) throw (settled[0] as PromiseRejectedResult).reason;
+
+  const next: Cursor = {};
+  settled.forEach((r, i) => (next[queries[i]] = r.status === "fulfilled" ? r.value.nextPageToken : null));
+
+  const lists = settled.map((r) => (r.status === "fulfilled" ? r.value.videos : []));
+  const mixed: VideoInfo[] = [];
+  const longest = Math.max(0, ...lists.map((l) => l.length));
+  for (let i = 0; i < longest; i++) for (const l of lists) if (l[i]) mixed.push(l[i]);
+  return { videos: mixed, cursor: next };
 }
 
 /** Becomes true once the element scrolls near the viewport (so rows load lazily and save API quota). */
@@ -157,14 +210,14 @@ function Scroller({ children }: { children: ReactNode }) {
       </div>
       <button
         onClick={() => scrollBy(-1)}
-        className="absolute left-0 top-[28%] hidden h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-border bg-card text-foreground shadow-lg transition hover:scale-105 group-hover/row:grid"
+        className="absolute left-1 top-[28%] hidden h-9 w-9 place-items-center rounded-full border border-border bg-card text-foreground shadow-lg transition hover:scale-105 group-hover/row:grid"
         aria-label="Scroll left"
       >
         <ChevronLeft className="h-4 w-4" />
       </button>
       <button
         onClick={() => scrollBy(1)}
-        className="absolute right-0 top-[28%] hidden h-9 w-9 translate-x-1/2 place-items-center rounded-full border border-border bg-card text-foreground shadow-lg transition hover:scale-105 group-hover/row:grid"
+        className="absolute right-1 top-[28%] hidden h-9 w-9 place-items-center rounded-full border border-border bg-card text-foreground shadow-lg transition hover:scale-105 group-hover/row:grid"
         aria-label="Scroll right"
       >
         <ChevronRight className="h-4 w-4" />
@@ -173,14 +226,14 @@ function Scroller({ children }: { children: ReactNode }) {
   );
 }
 
-function TopicRow({ topic, apiKey, onRemove, ...card }: { topic: WatchTopic; apiKey: string; onRemove: () => void } & CardProps) {
+function TopicRow({ section, apiKey, onEdit, ...card }: { section: WatchSection; apiKey: string; onEdit: () => void } & CardProps) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const q = useInfiniteQuery({
-    queryKey: ["watch-row", topic.query, topic.long ?? false, topic.group === "Music"],
-    queryFn: ({ pageParam }) => searchYouTube(apiKey, topic, pageParam ?? undefined),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.nextPageToken,
-    enabled: inView && !!apiKey,
+    queryKey: ["watch-mixed-row", section.queries, section.long ?? false, section.music ?? false],
+    queryFn: ({ pageParam }) => fetchMixed(apiKey, section, pageParam),
+    initialPageParam: null as Cursor | null,
+    getNextPageParam: (last) => (Object.values(last.cursor).some(Boolean) ? last.cursor : undefined),
+    enabled: inView && !!apiKey && section.queries.length > 0,
     staleTime: 1000 * 60 * 60,
     gcTime: 1000 * 60 * 120,
     refetchOnWindowFocus: false,
@@ -194,7 +247,10 @@ function TopicRow({ topic, apiKey, onRemove, ...card }: { topic: WatchTopic; api
   return (
     <section ref={ref} className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="truncate text-base font-semibold text-foreground">{topic.title}</h3>
+        <div className="min-w-0">
+          <h3 className="truncate font-display text-lg font-semibold text-foreground sm:text-xl">{section.title}</h3>
+          <p className="truncate text-[11px] text-muted-foreground">{section.queries.join(" · ")}</p>
+        </div>
         <div className="flex shrink-0 items-center gap-1">
           {q.hasNextPage && (
             <Button
@@ -209,16 +265,23 @@ function TopicRow({ topic, apiKey, onRemove, ...card }: { topic: WatchTopic; api
             </Button>
           )}
           <button
-            onClick={onRemove}
-            title={`Remove "${topic.title}"`}
-            className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+            onClick={onEdit}
+            title={`Edit "${section.title}"`}
+            className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
           >
-            <X className="h-3.5 w-3.5" />
+            <Pencil className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      {!inView || q.isLoading ? (
+      {section.queries.length === 0 ? (
+        <button
+          onClick={onEdit}
+          className="w-full rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground hover:border-primary/50 hover:text-primary"
+        >
+          Add keywords to fill this row
+        </button>
+      ) : !inView || q.isLoading ? (
         <div className="flex gap-3 overflow-hidden">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="w-56 shrink-0 sm:w-64">
@@ -262,26 +325,50 @@ function TopicRow({ topic, apiKey, onRemove, ...card }: { topic: WatchTopic; api
   );
 }
 
-function AddTopicDialog({ open, onOpenChange, onAdd }: { open: boolean; onOpenChange: (o: boolean) => void; onAdd: (t: WatchTopic) => void }) {
+/** Create or edit one topic: its name, the keywords mixed into its row, and options. */
+function TopicDialog({
+  section,
+  open,
+  onOpenChange,
+  onSave,
+  onDelete,
+}: {
+  section: WatchSection | null;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSave: (s: WatchSection) => void;
+  onDelete?: () => void;
+}) {
   const [title, setTitle] = useState("");
-  const [query, setQuery] = useState("");
-  const [group, setGroup] = useState<TopicGroup>("My topics");
+  const [queries, setQueries] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
   const [long, setLong] = useState(false);
+  const [music, setMusic] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setTitle("");
-      setQuery("");
-      setGroup("My topics");
-      setLong(false);
-    }
-  }, [open]);
+    if (!open) return;
+    setTitle(section?.title ?? "");
+    setQueries(section ? [...section.queries] : []);
+    setDraft("");
+    setLong(section?.long ?? false);
+    setMusic(section?.music ?? false);
+  }, [open, section]);
+
+  const pushDraft = () => {
+    const v = draft.trim().replace(/\s+/g, " ");
+    if (!v) return;
+    if (!queries.some((q) => q.toLowerCase() === v.toLowerCase())) setQueries((prev) => [...prev, v]);
+    setDraft("");
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const t = title.trim();
     if (!t) return;
-    onAdd({ id: `t-${Date.now().toString(36)}`, title: t, query: query.trim() || t, group, long });
+    const pending = draft.trim();
+    const qs = pending && !queries.includes(pending) ? [...queries, pending] : queries;
+    if (qs.length === 0) return toast.error("Add at least one keyword");
+    onSave({ id: section?.id ?? `s-${Date.now().toString(36)}`, title: t, queries: qs, long, music });
   };
 
   return (
@@ -289,48 +376,78 @@ function AddTopicDialog({ open, onOpenChange, onAdd }: { open: boolean; onOpenCh
       <DialogContent className="w-[calc(100vw-2rem)] rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-2xl sm:max-w-md sm:p-6">
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle className="font-display text-lg font-bold">Add a topic</DialogTitle>
-            <p className="text-xs text-muted-foreground">It becomes a new row of videos you can browse.</p>
+            <DialogTitle className="font-display text-lg font-bold">{section ? "Edit topic" : "Add a topic"}</DialogTitle>
+            <p className="text-xs text-muted-foreground">Each topic is one row. Videos from all its keywords are mixed together.</p>
           </DialogHeader>
           <div className="space-y-4 py-5">
             <div className="space-y-1.5">
               <Label htmlFor="topic-title" className="text-xs font-semibold">Topic name</Label>
-              <Input id="topic-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Personal finance" autoFocus className="h-10" />
+              <Input id="topic-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Podcasts, Personal finance" autoFocus={!section} className="h-10" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="topic-query" className="text-xs font-semibold">Search keywords (optional)</Label>
-              <Input id="topic-query" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ramit Sethi money podcast" className="h-10" />
-              <p className="text-[11px] text-muted-foreground">Name creators or shows you like for better results.</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Section</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {TOPIC_GROUPS.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => {
-                      setGroup(g);
-                      setLong(g === "Podcasts" || g === "Documentaries");
-                    }}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs transition",
-                      group === g ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {g}
-                  </button>
-                ))}
+              <Label htmlFor="topic-query" className="text-xs font-semibold">Keywords</Label>
+              {queries.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {queries.map((q, i) => (
+                    <span key={q} className="flex items-center gap-1 rounded-full border border-border bg-muted/50 py-1 pl-3 pr-1.5 text-xs text-foreground">
+                      {q}
+                      <button
+                        type="button"
+                        onClick={() => setQueries((prev) => prev.filter((_, j) => j !== i))}
+                        className="rounded-full p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        title={`Remove "${q}"`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  id="topic-query"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      pushDraft();
+                    }
+                  }}
+                  placeholder="e.g. Ramit Sethi money podcast"
+                  className="h-10"
+                />
+                <Button type="button" variant="outline" onClick={pushDraft} className="h-10 shrink-0 rounded-xl px-3">
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
+              <p className="text-[11px] text-muted-foreground">Name creators, shows or subjects. Press Enter to add each one.</p>
             </div>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input type="checkbox" checked={long} onChange={(e) => setLong(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
-              Long videos only (20+ min)
-            </label>
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" checked={long} onChange={(e) => setLong(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+                Long videos only (20+ min)
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" checked={music} onChange={(e) => setMusic(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+                Music only
+              </label>
+            </div>
           </div>
-          <DialogFooter className="flex-row justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-9 rounded-xl text-xs">Cancel</Button>
-            <Button type="submit" size="sm" disabled={!title.trim()} className="h-9 rounded-xl px-4 text-xs font-semibold">Add topic</Button>
+          <DialogFooter className="flex-row items-center justify-between gap-2 sm:justify-between">
+            {onDelete ? (
+              <Button type="button" variant="ghost" size="sm" onClick={onDelete} className="h-9 gap-1 text-xs text-destructive hover:bg-destructive/10">
+                <Trash2 className="h-3.5 w-3.5" /> Delete topic
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-9 rounded-xl text-xs">Cancel</Button>
+              <Button type="submit" size="sm" disabled={!title.trim()} className="h-9 rounded-xl px-4 text-xs font-semibold">
+                {section ? "Save" : "Add topic"}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -338,92 +455,75 @@ function AddTopicDialog({ open, onOpenChange, onAdd }: { open: boolean; onOpenCh
   );
 }
 
-/** Netflix-style discovery: one row per topic, grouped into sections. */
-export function Discover({
-  apiKey,
-  pickedForYou,
-  ...card
-}: {
-  apiKey: string;
-  /** Optional personalised row (from the user's playlists) shown first. */
-  pickedForYou?: { videos: VideoInfo[]; loading: boolean; subtitle?: string };
-} & CardProps) {
-  const { topics, save, resetToSuggested } = useWatchTopics();
-  const [adding, setAdding] = useState(false);
+/** Netflix-style discovery: one mixed row per topic. */
+export function Discover({ apiKey, ...card }: { apiKey: string } & CardProps) {
+  const { sections, save, resetToSuggested } = useWatchSections();
+  // undefined = closed, null = new topic, otherwise the topic being edited
+  const [editing, setEditing] = useState<WatchSection | null | undefined>(undefined);
 
-  const removeTopic = (id: string) => {
-    const t = topics.find((x) => x.id === id);
-    save(topics.filter((x) => x.id !== id));
-    if (t) toast.success(`Removed "${t.title}"`);
+  const upsert = (s: WatchSection) => {
+    const exists = sections.some((x) => x.id === s.id);
+    save(exists ? sections.map((x) => (x.id === s.id ? s : x)) : [...sections, s]);
+    setEditing(undefined);
+    toast.success(exists ? `Saved "${s.title}"` : `Added "${s.title}"`);
   };
 
-  const groups = TOPIC_GROUPS.map((g) => ({ group: g, items: topics.filter((t) => t.group === g) })).filter((g) => g.items.length > 0);
+  const remove = (id: string) => {
+    const s = sections.find((x) => x.id === id);
+    save(sections.filter((x) => x.id !== id));
+    setEditing(undefined);
+    if (s) toast.success(`Removed "${s.title}"`);
+  };
+
+  const move = (id: string, dir: -1 | 1) => {
+    const i = sections.findIndex((x) => x.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= sections.length) return;
+    const next = [...sections];
+    [next[i], next[j]] = [next[j], next[i]];
+    save(next);
+  };
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">Rows load as you scroll. Remove topics you don't want, or add your own.</p>
+        <p className="text-xs text-muted-foreground">Rows load as you scroll. Edit a topic to change what it shows.</p>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="ghost" onClick={resetToSuggested} className="h-8 gap-1.5 text-xs text-muted-foreground">
             <RotateCcw className="h-3.5 w-3.5" /> Reset
           </Button>
-          <Button size="sm" onClick={() => setAdding(true)} className="h-8 gap-1.5 text-xs">
+          <Button size="sm" onClick={() => setEditing(null)} className="h-8 gap-1.5 text-xs">
             <Plus className="h-3.5 w-3.5" /> Add topic
           </Button>
         </div>
       </div>
 
-      {pickedForYou && (pickedForYou.loading || pickedForYou.videos.length > 0) && (
-        <section className="space-y-2.5">
-          <div>
-            <h3 className="text-base font-semibold text-foreground">Picked for you</h3>
-            {pickedForYou.subtitle && <p className="text-xs text-muted-foreground">{pickedForYou.subtitle}</p>}
-          </div>
-          {pickedForYou.loading ? (
-            <div className="flex gap-3 overflow-hidden">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="aspect-video w-56 shrink-0 animate-pulse rounded-xl bg-muted sm:w-64" />
-              ))}
-            </div>
-          ) : (
-            <Scroller>
-              {pickedForYou.videos.map((v) => (
-                <RowCard
-                  key={v.videoId}
-                  video={v}
-                  active={card.activeVideoId === v.videoId}
-                  onPlay={() => card.onPlay(v, pickedForYou.videos)}
-                  actions={card.renderActions?.(v)}
-                />
-              ))}
-            </Scroller>
-          )}
-        </section>
-      )}
-
-      {groups.length === 0 && (
+      {sections.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
           No topics yet. Add one, or reset to the suggested topics.
         </div>
       )}
 
-      {groups.map(({ group, items }) => (
-        <div key={group} className="space-y-5">
-          <h2 className="font-display text-lg font-semibold text-foreground sm:text-xl">{group}</h2>
-          {items.map((t) => (
-            <TopicRow key={t.id} topic={t} apiKey={apiKey} onRemove={() => removeTopic(t.id)} {...card} />
-          ))}
+      {sections.map((s, idx) => (
+        <div key={s.id} className="group/topic relative">
+          <TopicRow section={s} apiKey={apiKey} onEdit={() => setEditing(s)} {...card} />
+          <div className="absolute -left-1 top-1 hidden -translate-x-full flex-col gap-0.5 xl:group-hover/topic:flex">
+            <button disabled={idx === 0} onClick={() => move(s.id, -1)} title="Move up" className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button disabled={idx === sections.length - 1} onClick={() => move(s.id, 1)} title="Move down" className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       ))}
 
-      <AddTopicDialog
-        open={adding}
-        onOpenChange={setAdding}
-        onAdd={(t) => {
-          save([...topics, t]);
-          setAdding(false);
-          toast.success(`Added "${t.title}"`);
-        }}
+      <TopicDialog
+        section={editing ?? null}
+        open={editing !== undefined}
+        onOpenChange={(o) => !o && setEditing(undefined)}
+        onSave={upsert}
+        onDelete={editing ? () => remove(editing.id) : undefined}
       />
     </div>
   );

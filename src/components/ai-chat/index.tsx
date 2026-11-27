@@ -7,6 +7,7 @@ import { WEEKLY_REVIEW_PROMPT, askGemini, buildSystemPrompt, type ChatMessage } 
 import { format } from "date-fns";
 import { ChatBubbleButton } from "./chat-bubble";
 import { ChatPanel } from "./chat-panel";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const CHATS_KEY = ["ai-chats"] as const;
 const messagesKey = (id: string) => ["ai-chat-messages", id] as const;
@@ -30,6 +31,9 @@ export function AiChat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
+  // Phones and small tablets always get the full-screen layout.
+  const isMobile = useIsMobile();
+  const fullScreen = expanded || isMobile;
 
   const { data: items = [] } = useItems();
   const { data: expenses = [] } = useExpenses();
@@ -56,13 +60,27 @@ export function AiChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, conversations.data]);
 
-  // Esc leaves full-window mode
+  // Esc leaves full-window mode (or closes the assistant on small screens)
   useEffect(() => {
-    if (!expanded) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setExpanded(false);
+    if (!fullScreen || !open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (isMobile) setOpen(false);
+      else setExpanded(false);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expanded]);
+  }, [fullScreen, open, isMobile]);
+
+  // Lock page scroll behind the full-screen assistant on phones
+  useEffect(() => {
+    if (!(open && isMobile)) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open, isMobile]);
 
   const messages: ChatMessage[] = activeId
     ? (activeMessages.data ?? []).map((m) => ({ role: m.role, text: m.text }))
@@ -141,7 +159,8 @@ export function AiChat() {
 
   const panel = (
     <ChatPanel
-      expanded={expanded}
+      expanded={fullScreen}
+      mobile={isMobile}
       conversations={conversations.data ?? []}
       conversationsLoading={conversations.isLoading}
       activeId={activeId}
@@ -168,14 +187,14 @@ export function AiChat() {
 
   return (
     <>
-      {open && expanded && (
-        <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-background/70 p-0 backdrop-blur-sm sm:p-6">
+      {open && fullScreen && (
+        <div className="fixed inset-0 z-[60] flex h-dvh items-stretch justify-center bg-background/70 p-0 backdrop-blur-sm md:p-6">
           {panel}
         </div>
       )}
 
       <div className="pointer-events-none fixed bottom-16 right-3 z-50 flex flex-col items-end gap-2.5 sm:bottom-6 sm:right-6">
-        {!expanded && (
+        {!fullScreen && (
           <div
             className="origin-bottom-right transition-all duration-300"
             style={{
@@ -188,7 +207,7 @@ export function AiChat() {
           </div>
         )}
 
-        {!expanded && (
+        {!(open && fullScreen) && (
           <div className="pointer-events-auto">
             <ChatBubbleButton
               open={open}

@@ -12,13 +12,14 @@ import {
   Trash2,
   Pin,
   PinOff,
+  FolderPlus,
 } from "lucide-react";
 import { useCreateFolder, useCreateItem, useDeleteFolder, useDeleteItem, useFolders, useItems, useUpdateItem } from "@/hooks/use-lifeos";
 import type { Folder as FolderType, Item } from "@/lib/lifeos-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
-import { NewPageDialog } from "@/components/new-page-dialog";
+import { NameWizard, NewPageDialog } from "@/components/new-page-dialog";
 import { usePinnedFolders } from "@/hooks/use-pinned-folders";
 import { emptyPageContent } from "@/lib/notebook-content";
 
@@ -102,19 +103,36 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
     }));
   };
 
+  // Folder wizard: undefined = closed, null = new top-level notebook, id = sub-folder of that folder
+  const [newFolderParent, setNewFolderParent] = useState<string | null | undefined>(undefined);
+
   const handleQuickAddNotebook = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setNewFolderParent(null);
+  };
+
+  const handleQuickAddSubfolder = (parentId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNewFolderParent(parentId);
+  };
+
+  const createNamedFolder = (name: string) => {
+    if (newFolderParent === undefined) return;
+    const parentId = newFolderParent;
     createFolder.mutate(
-      { name: "New Notebook", parent_folder_id: null },
+      { name, parent_folder_id: parentId },
       {
         onSuccess: (newFolder) => {
-          toast.success("Notebook created");
+          toast.success(parentId ? "Folder created" : "Notebook created");
+          setNewFolderParent(undefined);
           setRootExpanded(true);
+          if (parentId) setExpandedFolders((prev) => ({ ...prev, [parentId]: true }));
           navigate({
             to: "/notebooks",
             search: { folderId: newFolder.id, pageId: undefined },
           });
         },
+        onError: (err) => toast.error(err.message || "Couldn't create it"),
       }
     );
   };
@@ -250,6 +268,14 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
                     )}
                   >
                     {isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                  </button>
+                  <button
+                    type="button"
+                    title="Add sub-folder"
+                    onClick={(e) => handleQuickAddSubfolder(folder.id, e)}
+                    className="p-0.5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground transition-all"
+                  >
+                    <FolderPlus className="h-3 w-3" />
                   </button>
                   <button
                     type="button"
@@ -437,6 +463,15 @@ export function SidebarNotebookTree({ currentPath }: SidebarNotebookTreeProps) {
         notebookName={folders.find((f) => f.id === newPageFolderId)?.name ?? null}
         isPending={createItem.isPending}
         onCreate={(title) => newPageFolderId && createPageInFolder(newPageFolderId, title)}
+      />
+
+      <NameWizard
+        kind={newFolderParent ? "subfolder" : "notebook"}
+        open={newFolderParent !== undefined}
+        onOpenChange={(o) => !o && setNewFolderParent(undefined)}
+        parentName={newFolderParent ? folders.find((f) => f.id === newFolderParent)?.name ?? null : null}
+        isPending={createFolder.isPending}
+        onCreate={createNamedFolder}
       />
 
       {/* App Custom Popup Delete Confirmation Dialog */}

@@ -8,7 +8,6 @@ import {
   CheckSquare,
   Wallet,
   Clapperboard,
-  Archive,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/integrations/api/client";
@@ -81,12 +80,6 @@ export const ALL_SIDEBAR_ITEMS: SidebarConfigItem[] = [
     label: "Pinterest",
     description: "Visual moodboards & inspiration library",
     icon: PinterestIcon,
-  },
-  {
-    to: "/archive",
-    label: "Archive",
-    description: "Archived notes, tasks and records",
-    icon: Archive,
   },
 ];
 

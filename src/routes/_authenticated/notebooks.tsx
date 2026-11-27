@@ -25,7 +25,7 @@ import {
 } from "@/hooks/use-lifeos";
 import type { Folder, Item } from "@/lib/lifeos-types";
 import { usePinnedFolders } from "@/hooks/use-pinned-folders";
-import { NewPageDialog } from "@/components/new-page-dialog";
+import { NameWizard, NewPageDialog } from "@/components/new-page-dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,7 +75,7 @@ function Notebooks() {
   const deleteItem = useDeleteItem();
   const navigate = useNavigate();
 
-  const [newName, setNewName] = useState("");
+  const [newNotebookOpen, setNewNotebookOpen] = useState(false);
 
   // ── Pinned folders (stored on the server per user) ─────────────────────────
   const { pinnedFolderIds, togglePinFolder } = usePinnedFolders();
@@ -89,7 +89,6 @@ function Notebooks() {
   }, [search.pageId, items]);
 
   const [createSubFolderParentId, setCreateSubFolderParentId] = useState<string | null>(null);
-  const [createSubFolderName, setCreateSubFolderName] = useState("");
   const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
   const [renameFolderName, setRenameFolderName] = useState("");
   const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null);
@@ -158,10 +157,17 @@ function Notebooks() {
     return path;
   }, [folders, selectedFolderId]);
 
-  const addRoot = () => {
-    if (!newName.trim()) return;
-    createFolder.mutate({ name: newName.trim(), parent_folder_id: null }, { onError: (e) => toast.error(e.message) });
-    setNewName("");
+  const addRoot = (name: string) => {
+    createFolder.mutate(
+      { name, parent_folder_id: null },
+      {
+        onSuccess: () => {
+          setNewNotebookOpen(false);
+          toast.success("Notebook created");
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   // Opens the "name your page" wizard; the page is created on submit.
@@ -192,12 +198,17 @@ function Notebooks() {
 
   const selectedFolderName = folders.find((f) => f.id === selectedFolderId)?.name ?? null;
 
-  const handleCreateSubFolder = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!createSubFolderName.trim() || !createSubFolderParentId) return;
+  const handleCreateSubFolder = (name: string) => {
+    if (!createSubFolderParentId) return;
     createFolder.mutate(
-      { name: createSubFolderName.trim(), parent_folder_id: createSubFolderParentId },
-      { onSuccess: () => { setCreateSubFolderParentId(null); setCreateSubFolderName(""); }, onError: (err) => toast.error(err.message) }
+      { name, parent_folder_id: createSubFolderParentId },
+      {
+        onSuccess: () => {
+          setCreateSubFolderParentId(null);
+          toast.success("Folder created");
+        },
+        onError: (err) => toast.error(err.message),
+      }
     );
   };
 
@@ -274,34 +285,17 @@ function Notebooks() {
         {!search.pageId && (
           <div className="flex w-full sm:w-auto items-center gap-1.5 shrink-0">
             {selectedFolderId === null ? (
-              <div className="flex w-full sm:w-auto items-center gap-1.5">
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="New notebook…"
-                  className="h-9 sm:h-7 flex-1 sm:flex-none sm:w-44 text-sm sm:text-xs border-white/10 bg-white/[0.03]"
-                  onKeyDown={(e) => e.key === "Enter" && addRoot()}
-                />
-                <Button
-                  onClick={addRoot}
-                  size="sm"
-                  disabled={createFolder.isPending}
-                  className="h-9 sm:h-7 px-3 sm:px-2.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  {createFolder.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <>
-                      <FolderPlus className="h-3.5 w-3.5 sm:mr-1" />
-                      <span className="hidden sm:inline">Add</span>
-                    </>
-                  )}
-                </Button>
-              </div>
+              <Button
+                onClick={() => setNewNotebookOpen(true)}
+                size="sm"
+                className="h-9 sm:h-8 gap-1.5 px-3 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <FolderPlus className="h-3.5 w-3.5" /> New notebook
+              </Button>
             ) : (
               <div className="flex w-full sm:w-auto items-center gap-1.5">
                 <Button
-                  onClick={() => { setCreateSubFolderParentId(selectedFolderId); setCreateSubFolderName(""); }}
+                  onClick={() => setCreateSubFolderParentId(selectedFolderId)}
                   variant="outline" size="sm"
                   className="h-9 sm:h-7 flex-1 sm:flex-none px-2.5 text-xs border-white/10 bg-white/[0.03] hover:bg-white/[0.08]"
                 >
@@ -352,10 +346,6 @@ function Notebooks() {
                   { onError: (err) => toast.error(err.message || "Couldn't save this page") }
                 )
               }
-              onArchive={() => {
-                updateItem.mutate({ id: selectedPage.id, patch: { archived: true } });
-                closePage();
-              }}
               onDelete={() => {
                 deleteItem.mutate(selectedPage.id);
                 closePage();
@@ -468,22 +458,22 @@ function Notebooks() {
         onCreate={createPage}
       />
 
-      <Dialog open={createSubFolderParentId !== null} onOpenChange={(o) => !o && setCreateSubFolderParentId(null)}>
-        <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl w-[calc(100vw-2rem)] sm:max-w-sm p-5 sm:p-6">
-          <form onSubmit={handleCreateSubFolder}>
-            <DialogHeader><DialogTitle className="font-display text-lg font-bold text-foreground">New sub-notebook</DialogTitle></DialogHeader>
-            <div className="py-4">
-              <Input value={createSubFolderName} onChange={(e) => setCreateSubFolderName(e.target.value)} placeholder="Name…" autoFocus className="border border-input bg-background text-foreground text-sm h-9 rounded-xl" />
-            </div>
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setCreateSubFolderParentId(null)} className="border border-border bg-background text-foreground hover:bg-muted text-xs h-9 rounded-xl">Cancel</Button>
-              <Button type="submit" size="sm" disabled={createFolder.isPending} className="bg-primary text-primary-foreground text-xs font-semibold h-9 rounded-xl px-4">
-                {createFolder.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Create"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <NameWizard
+        kind="notebook"
+        open={newNotebookOpen}
+        onOpenChange={setNewNotebookOpen}
+        isPending={createFolder.isPending}
+        onCreate={addRoot}
+      />
+
+      <NameWizard
+        kind="subfolder"
+        open={createSubFolderParentId !== null}
+        onOpenChange={(o) => !o && setCreateSubFolderParentId(null)}
+        parentName={folders.find((f) => f.id === createSubFolderParentId)?.name ?? null}
+        isPending={createFolder.isPending}
+        onCreate={handleCreateSubFolder}
+      />
 
       <Dialog open={renameFolderId !== null} onOpenChange={(o) => !o && setRenameFolderId(null)}>
         <DialogContent className="border border-border bg-card text-card-foreground shadow-2xl rounded-2xl w-[calc(100vw-2rem)] sm:max-w-sm p-5 sm:p-6">

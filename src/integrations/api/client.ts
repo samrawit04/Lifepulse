@@ -50,10 +50,69 @@ export interface PinterestPin {
   sourceDomain: string | null;
 }
 
+export interface AdminDayCount {
+  date: string;
+  count: number;
+}
+
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  sign_in_method: string;
+  joined_at: string;
+  last_active_at: string | null;
+  items: number;
+  expenses: number;
+}
+
+export interface AdminStats {
+  total_users: number;
+  new_users7d: number;
+  new_users30d: number;
+  active_users7d: number;
+  active_users30d: number;
+  google_users: number;
+  email_users: number;
+  notes: number;
+  notebook_pages: number;
+  tasks: number;
+  events: number;
+  expenses: number;
+  chat_conversations: number;
+  signups_by_day: AdminDayCount[];
+  active_by_day: AdminDayCount[];
+  users: AdminUserRow[];
+}
+
+export type PinterestSource = "pinterest" | "pexels" | "unsplash" | "openverse" | "none";
+
 export interface PinterestSearchResponse {
   pins: PinterestPin[];
   bookmark: string | null;
   hasMore: boolean;
+  /** Where the images came from (the server falls back when Pinterest blocks it). */
+  source: PinterestSource;
+}
+
+/** The API answers in snake_case; the UI works with camelCase pins. */
+function normalizePin(raw: any): PinterestPin {
+  return {
+    id: String(raw.id),
+    title: raw.title ?? null,
+    description: raw.description ?? null,
+    imageUrl: raw.image_url ?? raw.imageUrl ?? "",
+    thumbnailUrl: raw.thumbnail_url ?? raw.thumbnailUrl ?? raw.image_url ?? raw.imageUrl ?? "",
+    width: Number(raw.width) || 736,
+    height: Number(raw.height) || 1104,
+    pinnerName: raw.pinner_name ?? raw.pinnerName ?? null,
+    pinnerAvatar: raw.pinner_avatar ?? raw.pinnerAvatar ?? null,
+    pinUrl: raw.pin_url ?? raw.pinUrl ?? "https://www.pinterest.com/",
+    dominantColor: raw.dominant_color ?? raw.dominantColor ?? null,
+    boardName: raw.board_name ?? raw.boardName ?? null,
+    sourceDomain: raw.source_domain ?? raw.sourceDomain ?? null,
+  };
 }
 
 export interface ChatConversation {
@@ -418,11 +477,21 @@ class ApiClient {
   };
 
   // ── Pinterest Operations ────────────────────────────────────────────────────
+  admin = {
+    me: (): Promise<{ is_admin: boolean }> => this.get<{ is_admin: boolean }>("/api/admin/me"),
+    stats: (): Promise<AdminStats> => this.get<AdminStats>("/api/admin/stats"),
+  };
+
   pinterest = {
     search: (query: string, bookmark?: string): Promise<PinterestSearchResponse> => {
       const params = new URLSearchParams({ q: query });
       if (bookmark) params.set("bookmark", bookmark);
-      return this.get<PinterestSearchResponse>(`/api/pinterest/search?${params}`);
+      return this.get<any>(`/api/pinterest/search?${params}`).then((raw) => ({
+        pins: (raw?.pins ?? []).map(normalizePin).filter((p: PinterestPin) => p.imageUrl),
+        bookmark: raw?.bookmark ?? null,
+        hasMore: Boolean(raw?.has_more ?? raw?.hasMore),
+        source: (raw?.source ?? "pinterest") as PinterestSource,
+      }));
     },
     getOembed: (pinUrl: string): Promise<any> => {
       return this.get<any>(`/api/pinterest/oembed?url=${encodeURIComponent(pinUrl)}`);
