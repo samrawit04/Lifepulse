@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authenticated/calendar")({
   component: CalendarPage,
 });
 
-type View = "month" | "week" | "workweek" | "day";
+type View = "week" | "month" | "day";
 
 function CalendarPage() {
   const { data: items = [] } = useItems();
@@ -51,7 +51,7 @@ function CalendarPage() {
   const openNew = (d: Date) => setSelectedDate(d);
   const shift = (dir: 1 | -1) => {
     if (view === "month") setCursor((c) => (dir > 0 ? addMonths(c, 1) : subMonths(c, 1)));
-    if (view === "week" || view === "workweek") setCursor((c) => (dir > 0 ? addWeeks(c, 1) : subWeeks(c, 1)));
+    if (view === "week") setCursor((c) => (dir > 0 ? addWeeks(c, 1) : subWeeks(c, 1)));
     if (view === "day") setCursor((c) => addDays(c, dir));
   };
 
@@ -79,9 +79,8 @@ function CalendarPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={view} onValueChange={(v) => setView(v as View)}>
             <TabsList className="bg-muted/60">
-              <TabsTrigger value="month" className="text-xs">Month</TabsTrigger>
-              <TabsTrigger value="workweek" className="text-xs">Work week</TabsTrigger>
               <TabsTrigger value="week" className="text-xs">Week</TabsTrigger>
+              <TabsTrigger value="month" className="text-xs">Month</TabsTrigger>
               <TabsTrigger value="day" className="text-xs">Day</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -95,9 +94,7 @@ function CalendarPage() {
                 ? format(cursor, "MMMM yyyy")
                 : view === "week"
                   ? format(startOfWeek(cursor), "'Week of' MMM d")
-                  : view === "workweek"
-                    ? format(startOfWeek(cursor, { weekStartsOn: 1 }), "'Week of' MMM d")
-                    : format(cursor, "EEEE, MMM d")}
+                  : format(cursor, "EEEE, MMM d")}
             </span>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => shift(1)}>
               <ChevronRight className="h-4 w-4" />
@@ -124,16 +121,6 @@ function CalendarPage() {
       {view === "week" && (
         <TimeGrid
           days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(cursor), i))}
-          now={now}
-          eventsForDay={eventsForDay}
-          folderColor={folderColor}
-          onSlotClick={openNew}
-          onEventClick={setEditing}
-        />
-      )}
-      {view === "workweek" && (
-        <TimeGrid
-          days={Array.from({ length: 5 }, (_, i) => addDays(startOfWeek(cursor, { weekStartsOn: 1 }), i))}
           now={now}
           eventsForDay={eventsForDay}
           folderColor={folderColor}
@@ -432,13 +419,15 @@ function TimeGrid({
   }, [rangeKey]);
 
   const gridCols = { gridTemplateColumns: `56px repeat(${days.length}, minmax(0, 1fr))` };
+  // Header rows reserve the same scrollbar space as the hour grid so columns line up
+  const gutter: React.CSSProperties = { overflowY: "hidden", scrollbarGutter: "stable" };
 
   return (
     <div className="overflow-hidden rounded-2xl border bg-card shadow-soft">
       <div className="overflow-x-auto">
         <div className={cn(isWeek && "min-w-[720px]")}>
           {/* Day headers */}
-          <div className="grid border-b" style={gridCols}>
+          <div className="grid border-b" style={{ ...gridCols, ...gutter }}>
             <div className="flex items-end justify-center pb-1 text-[9px] font-medium text-muted-foreground">
               {format(now, "O")}
             </div>
@@ -467,7 +456,7 @@ function TimeGrid({
 
           {/* All-day row (tasks with a date but no time) */}
           {days.some((d) => eventsForDay(d).some((e) => itemTiming(e)?.allDay)) && (
-            <div className="grid border-b bg-muted/20" style={gridCols}>
+            <div className="grid border-b bg-muted/20" style={{ ...gridCols, ...gutter }}>
               <div className="flex items-center justify-end pr-2 text-[9px] font-medium uppercase text-muted-foreground">
                 All day
               </div>
@@ -494,7 +483,7 @@ function TimeGrid({
           )}
 
           {/* Scrollable hours */}
-          <div ref={scrollRef} className="relative max-h-[65vh] overflow-y-auto">
+          <div ref={scrollRef} className="relative max-h-[65vh] overflow-y-auto" style={{ scrollbarGutter: "stable" }}>
             <div className="relative grid" style={{ ...gridCols, height: 24 * HOUR_HEIGHT }}>
               {/* Hour gutter */}
               <div className="relative">
