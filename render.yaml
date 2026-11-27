@@ -26,8 +26,3 @@ services:
       # Render dashboard (kept out of the repo).
       - key: Admin__Emails
         sync: false
-      # Optional image sources for the Pinterest page when Pinterest blocks the server.
-      - key: PEXELS_API_KEY
-        sync: false
-      - key: UNSPLASH_ACCESS_KEY
-        sync: false

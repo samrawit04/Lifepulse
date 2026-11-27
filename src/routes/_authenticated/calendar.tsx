@@ -455,8 +455,8 @@ function TimeGrid({
             })}
           </div>
 
-          {/* All-day row (tasks with a date but no time) */}
-          {days.some((d) => eventsForDay(d).some((e) => itemTiming(e)?.allDay)) && (
+          {/* All-day row (tasks with a date but no time) — day view only; the week view has no all-day row */}
+          {!isWeek && days.some((d) => eventsForDay(d).some((e) => itemTiming(e)?.allDay)) && (
             <div className="grid border-b bg-muted/20" style={{ ...gridCols, ...gutter }}>
               <div className="flex items-center justify-end pr-2 text-[9px] font-medium uppercase text-muted-foreground">
                 All day

@@ -25,15 +25,97 @@ export const Route = createFileRoute("/_authenticated/books")({
 
 // ─── Rows ────────────────────────────────────────────────────────────────────
 
-/** Free classics from Project Gutenberg, readable right here. */
-const FREE_ROWS: { id: string; title: string; subtitle: string; topic?: string; q?: string }[] = [
-  { id: "popular", title: "Most-read free classics", subtitle: "The books people open most on Project Gutenberg" },
-  { id: "growth", title: "Self-improvement classics", subtitle: "Timeless advice on habits, character and living well", topic: "conduct of life" },
-  { id: "philosophy", title: "Philosophy", subtitle: "Stoics, ancients and the big questions", topic: "philosophy" },
-  { id: "psychology", title: "Psychology & the mind", subtitle: "How people think and behave", topic: "psychology" },
-  { id: "business", title: "Money, work & economics", subtitle: "Classic thinking on wealth and work", topic: "economics" },
-  { id: "adventure", title: "Great stories", subtitle: "Adventure, mystery and novels everyone should read", topic: "adventure" },
+/** Hand-picked free classics (Project Gutenberg ids) — shows instantly, no catalogue call needed. */
+type Pick = [id: number, title: string, author: string];
+const CURATED: { id: string; title: string; subtitle: string; books: Pick[] }[] = [
+  {
+    id: "growth",
+    title: "Self-improvement classics",
+    subtitle: "Timeless advice on habits, character and living well",
+    books: [
+      [2680, "Meditations", "Marcus Aurelius"],
+      [4507, "As a Man Thinketh", "James Allen"],
+      [2274, "How to Live on 24 Hours a Day", "Arnold Bennett"],
+      [45109, "The Enchiridion", "Epictetus"],
+      [148, "The Autobiography of Benjamin Franklin", "Benjamin Franklin"],
+      [2944, "Essays (incl. Self-Reliance)", "Ralph Waldo Emerson"],
+      [935, "Self-Help", "Samuel Smiles"],
+      [205, "Walden", "Henry David Thoreau"],
+      [34258, "Acres of Diamonds", "Russell H. Conwell"],
+      [8581, "The Art of Money Getting", "P. T. Barnum"],
+      [43855, "The Way to Wealth", "Benjamin Franklin"],
+      [216, "Tao Te Ching", "Lao Tzu"],
+    ],
+  },
+  {
+    id: "psychology",
+    title: "Psychology & human nature",
+    subtitle: "How people think, follow and change",
+    books: [
+      [24518, "Extraordinary Popular Delusions and the Madness of Crowds", "Charles Mackay"],
+      [445, "The Crowd", "Gustave Le Bon"],
+      [621, "The Varieties of Religious Experience", "William James"],
+      [16287, "Talks to Teachers on Psychology", "William James"],
+      [15489, "Dream Psychology", "Sigmund Freud"],
+      [3351, "Letters to His Son", "Lord Chesterfield"],
+    ],
+  },
+  {
+    id: "philosophy",
+    title: "Philosophy",
+    subtitle: "Stoics, ancients and the big questions",
+    books: [
+      [1497, "The Republic", "Plato"],
+      [1232, "The Prince", "Niccolò Machiavelli"],
+      [4363, "Beyond Good and Evil", "Friedrich Nietzsche"],
+      [1998, "Thus Spake Zarathustra", "Friedrich Nietzsche"],
+      [13726, "Apology, Crito and Phaedo", "Plato"],
+      [3330, "The Analects", "Confucius"],
+      [34901, "On Liberty", "John Stuart Mill"],
+      [3207, "Leviathan", "Thomas Hobbes"],
+      [575, "Essays", "Francis Bacon"],
+    ],
+  },
+  {
+    id: "strategy",
+    title: "Strategy, money & work",
+    subtitle: "Classic thinking on winning, wealth and work",
+    books: [
+      [132, "The Art of War", "Sun Tzu"],
+      [3300, "The Wealth of Nations", "Adam Smith"],
+      [833, "The Theory of the Leisure Class", "Thorstein Veblen"],
+      [6435, "The Principles of Scientific Management", "Frederick W. Taylor"],
+    ],
+  },
+  {
+    id: "stories",
+    title: "Great stories",
+    subtitle: "Novels everyone should read once",
+    books: [
+      [1342, "Pride and Prejudice", "Jane Austen"],
+      [2554, "Crime and Punishment", "Fyodor Dostoyevsky"],
+      [1184, "The Count of Monte Cristo", "Alexandre Dumas"],
+      [1260, "Jane Eyre", "Charlotte Brontë"],
+      [174, "The Picture of Dorian Gray", "Oscar Wilde"],
+      [2500, "Siddhartha", "Hermann Hesse"],
+      [84, "Frankenstein", "Mary Shelley"],
+      [2701, "Moby Dick", "Herman Melville"],
+      [1661, "The Adventures of Sherlock Holmes", "Arthur Conan Doyle"],
+      [345, "Dracula", "Bram Stoker"],
+      [11, "Alice's Adventures in Wonderland", "Lewis Carroll"],
+      [1513, "Romeo and Juliet", "William Shakespeare"],
+    ],
+  },
 ];
+
+const pickToBook = ([id, title, author]: Pick): SavedBook => ({
+  id: `gb:${id}`,
+  title,
+  author,
+  cover: null,
+  source: "gutenberg",
+  gutenbergId: id,
+});
 
 /** Modern books from Open Library — borrowed and read on their site (free account). */
 const MODERN_ROWS: { id: string; title: string; subject: string }[] = [
@@ -63,22 +145,33 @@ function hueFor(text: string) {
   return h;
 }
 
+/** A clean typographic cover (real covers from Gutenberg don't load reliably everywhere). */
 function Cover({ book, className }: { book: SavedBook; className?: string }) {
   const [failed, setFailed] = useState(false);
-  const hue = hueFor(book.title);
-  return (
-    <div className={cn("relative aspect-[2/3] overflow-hidden rounded-lg shadow-md ring-1 ring-black/10", className)}>
-      {book.cover && !failed ? (
+  const hue = hueFor(book.title + book.author);
+  if (book.cover && !failed) {
+    return (
+      <div className={cn("relative aspect-[2/3] overflow-hidden rounded-md shadow-md ring-1 ring-black/10", className)}>
         <img src={book.cover} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" />
-      ) : (
-        <div
-          className="flex h-full w-full flex-col justify-between p-3 pt-8"
-          style={{ background: `linear-gradient(160deg, oklch(0.55 0.1 ${hue}), oklch(0.32 0.07 ${(hue + 40) % 360}))` }}
-        >
-          <p className="line-clamp-4 font-display text-sm font-semibold leading-snug text-white">{book.title}</p>
-          <p className="line-clamp-2 text-[10px] text-white/75">{book.author}</p>
-        </div>
-      )}
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn("relative flex aspect-[2/3] flex-col overflow-hidden rounded-md p-[9%] text-center shadow-[0_6px_18px_-6px_rgba(0,0,0,.5)]", className)}
+      style={{ background: `linear-gradient(155deg, oklch(0.42 0.09 ${hue}), oklch(0.27 0.06 ${(hue + 25) % 360}))` }}
+    >
+      {/* spine shading */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-[7%] bg-gradient-to-r from-black/35 to-transparent" />
+      <div className="pointer-events-none absolute inset-[5%] rounded-sm border border-white/25" />
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-2">
+        <span className="h-px w-1/3 bg-white/40" />
+        <p className="line-clamp-5 font-serif text-[0.8rem] font-semibold leading-snug text-white sm:text-sm" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+          {book.title}
+        </p>
+        <span className="h-px w-1/3 bg-white/40" />
+      </div>
+      <p className="relative line-clamp-2 text-[9px] font-medium uppercase tracking-[0.14em] text-white/75">{book.author}</p>
     </div>
   );
 }
@@ -147,46 +240,17 @@ const BorrowBadge = () => <span className="rounded-md bg-sky-600/90 px-1.5 py-0.
 
 // ─── Discover rows ───────────────────────────────────────────────────────────
 
-function FreeRow({ row, onOpen }: { row: (typeof FREE_ROWS)[number]; onOpen: (b: SavedBook, extra?: GutenbergBook) => void }) {
-  const { ref, inView } = useInView<HTMLElement>();
-  const q = useInfiniteQuery({
-    queryKey: ["books-row", row.topic ?? "", row.q ?? ""],
-    queryFn: ({ pageParam }) => apiClient.books.search({ topic: row.topic, q: row.q, page: pageParam }),
-    initialPageParam: 1,
-    getNextPageParam: (last) => last.next_page ?? undefined,
-    enabled: inView,
-    staleTime: 1000 * 60 * 60,
-    refetchOnWindowFocus: false,
-  });
-  const books = useMemo(() => (q.data?.pages ?? []).flatMap((p) => p.books).filter((b) => b.has_text), [q.data]);
-
+function CuratedRow({ row, onOpen }: { row: (typeof CURATED)[number]; onOpen: (b: SavedBook) => void }) {
+  const { progress } = useReadingProgress();
   return (
-    <section ref={ref}>
-      <RowHeader
-        title={row.title}
-        subtitle={row.subtitle}
-        action={
-          q.hasNextPage ? (
-            <Button size="sm" variant="ghost" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage} className="h-7 gap-1 px-2 text-xs text-primary">
-              {q.isFetchingNextPage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} More
-            </Button>
-          ) : null
-        }
-      />
-      {!inView || q.isLoading ? (
-        <RowSkeleton />
-      ) : q.isError ? (
-        <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-xs text-muted-foreground">
-          Couldn't load these books.
-          <button onClick={() => q.refetch()} className="font-medium text-primary hover:underline">Try again</button>
-        </div>
-      ) : (
-        <Scroller>
-          {books.map((b) => (
-            <BookCard key={b.id} book={fromGutenberg(b)} badge={<FreeBadge />} onOpen={() => onOpen(fromGutenberg(b), b)} />
-          ))}
-        </Scroller>
-      )}
+    <section>
+      <RowHeader title={row.title} subtitle={row.subtitle} />
+      <Scroller>
+        {row.books.map((p) => {
+          const b = pickToBook(p);
+          return <BookCard key={b.id} book={b} badge={<FreeBadge />} progress={progress[b.id]?.percent} onOpen={() => onOpen(b)} />;
+        })}
+      </Scroller>
     </section>
   );
 }
@@ -246,7 +310,7 @@ function SearchResults({ query, onOpen }: { query: string; onOpen: (b: SavedBook
 
   return (
     <section>
-      <RowHeader title={`Free books for "${query}"`} subtitle={q.data ? `${q.data.pages[0]?.count ?? 0} matches on Project Gutenberg` : undefined} />
+      <RowHeader title={`Free books for "${query}"`} subtitle={q.data ? `${q.data.pages[0]?.count ?? 0} matches in the Project Gutenberg library` : undefined} />
       {q.isLoading ? (
         <RowSkeleton />
       ) : q.isError ? (
@@ -619,7 +683,7 @@ function Reader({ book, onClose }: { book: SavedBook; onClose: () => void }) {
         <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto overscroll-contain">
           {text.isLoading ? (
             <div className="grid h-full place-items-center text-sm" style={{ color: t.muted }}>
-              <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Opening the book…</span>
+              <span className="flex flex-col items-center gap-2 text-center"><span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Opening the book…</span><span className="text-xs opacity-70">The first time can take a few seconds.</span></span>
             </div>
           ) : text.isError ? (
             <div className="mx-auto max-w-md px-6 py-24 text-center text-sm" style={{ color: t.muted }}>
@@ -757,12 +821,12 @@ function BooksPage() {
                   </Scroller>
                 </section>
               )}
-              {FREE_ROWS.slice(0, 3).map((r) => <FreeRow key={r.id} row={r} onOpen={open} />)}
+              {CURATED.slice(0, 2).map((r) => <CuratedRow key={r.id} row={r} onOpen={(b) => open(b)} />)}
               <ModernRow row={MODERN_ROWS[0]} onOpen={(b) => open(b)} />
-              {FREE_ROWS.slice(3).map((r) => <FreeRow key={r.id} row={r} onOpen={open} />)}
+              {CURATED.slice(2).map((r) => <CuratedRow key={r.id} row={r} onOpen={(b) => open(b)} />)}
               {MODERN_ROWS.slice(1).map((r) => <ModernRow key={r.id} row={r} onOpen={(b) => open(b)} />)}
               <p className="pb-4 text-center text-[11px] text-muted-foreground">
-                Free books come from Project Gutenberg (public domain). Modern books open on Open Library, where you can borrow them with a free account.
+                Free books are public-domain classics from Project Gutenberg. Modern books open on Open Library, where you can borrow them with a free account.
               </p>
             </>
           )}

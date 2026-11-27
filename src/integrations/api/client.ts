@@ -34,22 +34,6 @@ export interface PlaylistItem {
   addedAt: string;
 }
 
-export interface PinterestPin {
-  id: string;
-  title: string | null;
-  description: string | null;
-  imageUrl: string;
-  thumbnailUrl: string;
-  width: number;
-  height: number;
-  pinnerName: string | null;
-  pinnerAvatar: string | null;
-  pinUrl: string;
-  dominantColor: string | null;
-  boardName: string | null;
-  sourceDomain: string | null;
-}
-
 export interface GutenbergBook {
   id: number;
   title: string;
@@ -101,35 +85,6 @@ export interface AdminStats {
   signups_by_day: AdminDayCount[];
   active_by_day: AdminDayCount[];
   users: AdminUserRow[];
-}
-
-export type PinterestSource = "pinterest" | "pexels" | "unsplash" | "openverse" | "none";
-
-export interface PinterestSearchResponse {
-  pins: PinterestPin[];
-  bookmark: string | null;
-  hasMore: boolean;
-  /** Where the images came from (the server falls back when Pinterest blocks it). */
-  source: PinterestSource;
-}
-
-/** The API answers in snake_case; the UI works with camelCase pins. */
-function normalizePin(raw: any): PinterestPin {
-  return {
-    id: String(raw.id),
-    title: raw.title ?? null,
-    description: raw.description ?? null,
-    imageUrl: raw.image_url ?? raw.imageUrl ?? "",
-    thumbnailUrl: raw.thumbnail_url ?? raw.thumbnailUrl ?? raw.image_url ?? raw.imageUrl ?? "",
-    width: Number(raw.width) || 736,
-    height: Number(raw.height) || 1104,
-    pinnerName: raw.pinner_name ?? raw.pinnerName ?? null,
-    pinnerAvatar: raw.pinner_avatar ?? raw.pinnerAvatar ?? null,
-    pinUrl: raw.pin_url ?? raw.pinUrl ?? "https://www.pinterest.com/",
-    dominantColor: raw.dominant_color ?? raw.dominantColor ?? null,
-    boardName: raw.board_name ?? raw.boardName ?? null,
-    sourceDomain: raw.source_domain ?? raw.sourceDomain ?? null,
-  };
 }
 
 export interface ChatConversation {
@@ -493,7 +448,7 @@ class ApiClient {
       this.delete<void>("/api/notifications"),
   };
 
-  // ── Pinterest Operations ────────────────────────────────────────────────────
+  // ── Books ───────────────────────────────────────────────────────────────────
   books = {
     search: (params: { q?: string; topic?: string; page?: number }): Promise<BookSearchResponse> => {
       const qs = new URLSearchParams();
@@ -510,21 +465,6 @@ class ApiClient {
     stats: (): Promise<AdminStats> => this.get<AdminStats>("/api/admin/stats"),
   };
 
-  pinterest = {
-    search: (query: string, bookmark?: string): Promise<PinterestSearchResponse> => {
-      const params = new URLSearchParams({ q: query });
-      if (bookmark) params.set("bookmark", bookmark);
-      return this.get<any>(`/api/pinterest/search?${params}`).then((raw) => ({
-        pins: (raw?.pins ?? []).map(normalizePin).filter((p: PinterestPin) => p.imageUrl),
-        bookmark: raw?.bookmark ?? null,
-        hasMore: Boolean(raw?.has_more ?? raw?.hasMore),
-        source: (raw?.source ?? "pinterest") as PinterestSource,
-      }));
-    },
-    getOembed: (pinUrl: string): Promise<any> => {
-      return this.get<any>(`/api/pinterest/oembed?url=${encodeURIComponent(pinUrl)}`);
-    },
-  };
 }
 
 export const apiClient = new ApiClient();
