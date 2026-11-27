@@ -23,7 +23,6 @@ import {
   X,
   FolderPlus,
   ThumbsUp,
-  Sparkles,
   ListOrdered,
   Shuffle,
   Repeat,
@@ -557,7 +556,6 @@ function MusicPage() {
                 >
                   {tab === "player" && <Tv className="h-4 w-4" />}
                   {tab === "search" && <Search className="h-4 w-4" />}
-                  {tab === "foryou" && <Sparkles className="h-4 w-4" />}
                   <span>{tab === "player" ? "Now Playing" : tab === "search" ? "Search Results" : "Discover"}</span>
                   {tab === "player" && currentVideo && (
                     <span className="flex h-2 w-2 relative">

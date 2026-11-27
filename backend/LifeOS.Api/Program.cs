@@ -14,13 +14,8 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient();
-// Pinterest needs its session cookies passed by hand, so this client must not keep its own cookie jar.
-builder.Services.AddHttpClient("pinterest", c => c.Timeout = TimeSpan.FromSeconds(12))
-    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-    {
-        UseCookies = false,
-        AutomaticDecompression = System.Net.DecompressionMethods.All,
-    });
+// Compress API responses (book texts shrink to about a third)
+builder.Services.AddResponseCompression(o => o.EnableForHttps = true);
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<GoogleAuthService>();
 builder.Services.AddHostedService<AutoBackupService>();
@@ -111,6 +106,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseResponseCompression();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();

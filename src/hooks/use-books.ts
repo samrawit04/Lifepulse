@@ -23,7 +23,7 @@ export type ReaderPrefs = { fontSize: number; theme: "dark" | "sepia" | "light" 
 
 const DEFAULT_SHELVES: Shelf[] = [{ id: "want-to-read", name: "Want to read", books: [] }];
 const NO_PROGRESS: Record<string, ReadingProgress> = {};
-const DEFAULT_PREFS: ReaderPrefs = { fontSize: 19, theme: "sepia" };
+const DEFAULT_PREFS: ReaderPrefs = { fontSize: 19, theme: "dark" };
 
 export function fromGutenberg(b: GutenbergBook): SavedBook {
   return {

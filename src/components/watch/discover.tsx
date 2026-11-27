@@ -31,6 +31,14 @@ export type WatchSection = {
 /** Suggested starting topics, focused on growth and productivity. Users can edit everything. */
 export const SUGGESTED_SECTIONS: WatchSection[] = [
   {
+    id: "documentaries",
+    title: "Documentaries",
+    long: true,
+    queries: ["full documentary science nature", "full history documentary", "business technology documentary"],
+  },
+  { id: "entertainment", title: "Entertainment", queries: ["clean stand up comedy special", "official movie trailer"] },
+  { id: "learning", title: "Learning", queries: ["Ali Abdaal productivity", "TED talk personal growth", "how to learn faster"] },
+  {
     id: "podcasts",
     title: "Podcasts",
     long: true,
@@ -41,16 +49,15 @@ export const SUGGESTED_SECTIONS: WatchSection[] = [
       "Jay Shetty On Purpose mindset habits",
     ],
   },
-  { id: "learning", title: "Learning", queries: ["Ali Abdaal productivity", "TED talk personal growth", "how to learn faster"] },
-  {
-    id: "documentaries",
-    title: "Documentaries",
-    long: true,
-    queries: ["full documentary science nature", "full history documentary", "business technology documentary"],
-  },
   { id: "music", title: "Music", music: true, queries: ["lofi focus study music", "calm relaxing instrumental music"] },
-  { id: "entertainment", title: "Entertainment", queries: ["clean stand up comedy special", "official movie trailer"] },
 ];
+
+/** Preferred order for the built-in topics (custom topics keep their place after these). */
+const PREFERRED_ORDER = ["documentaries", "entertainment", "learning", "podcasts", "music"];
+const rankOf = (s: WatchSection) => {
+  const i = PREFERRED_ORDER.indexOf(s.title.trim().toLowerCase());
+  return i === -1 ? PREFERRED_ORDER.length : i;
+};
 
 /** Shape saved by the previous version: one row per keyword with a group name. */
 type LegacyTopic = { id: string; title: string; query: string; group: string; long?: boolean };
@@ -87,6 +94,7 @@ export function useWatchSections() {
 
   return {
     sections,
+    hasSaved: hasSavedValue && !!saved,
     isLoading,
     save: (next: WatchSection[]) => save(next),
     resetToSuggested: () => save(SUGGESTED_SECTIONS),
@@ -249,7 +257,6 @@ function TopicRow({ section, apiKey, onEdit, ...card }: { section: WatchSection;
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate font-display text-lg font-semibold text-foreground sm:text-xl">{section.title}</h3>
-          <p className="truncate text-[11px] text-muted-foreground">{section.queries.join(" · ")}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {q.hasNextPage && (
@@ -457,7 +464,17 @@ function TopicDialog({
 
 /** Netflix-style discovery: one mixed row per topic. */
 export function Discover({ apiKey, ...card }: { apiKey: string } & CardProps) {
-  const { sections, save, resetToSuggested } = useWatchSections();
+  const { sections, hasSaved, save, resetToSuggested } = useWatchSections();
+  const { value: reordered, isLoading: orderLoading, save: markReordered } = useUserSetting<boolean>("watch-sections-reordered", false);
+
+  // One time: put Documentaries, Entertainment, Learning, Podcasts, Music first for people who already saved topics
+  useEffect(() => {
+    if (orderLoading || reordered || !hasSaved) return;
+    const sorted = [...sections].map((s, i) => ({ s, i })).sort((a, b) => rankOf(a.s) - rankOf(b.s) || a.i - b.i).map((x) => x.s);
+    if (sorted.some((s, i) => s.id !== sections[i].id)) save(sorted);
+    markReordered(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderLoading, reordered, hasSaved]);
   // undefined = closed, null = new topic, otherwise the topic being edited
   const [editing, setEditing] = useState<WatchSection | null | undefined>(undefined);
 
