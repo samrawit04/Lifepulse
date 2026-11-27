@@ -8,6 +8,7 @@ import {
   CheckSquare,
   Wallet,
   Clapperboard,
+  BookOpen,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/integrations/api/client";
@@ -74,6 +75,12 @@ export const ALL_SIDEBAR_ITEMS: SidebarConfigItem[] = [
     label: "Watch",
     description: "Podcasts, music, documentaries & more",
     icon: Clapperboard,
+  },
+  {
+    to: "/books",
+    label: "Books",
+    description: "Free books, a built-in reader & reading lists",
+    icon: BookOpen,
   },
   {
     to: "/pinterest",

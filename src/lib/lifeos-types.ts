@@ -152,3 +152,25 @@ export const EXPENSE_CATEGORIES = [
 export function categoryEmoji(cat: string): string {
   return EXPENSE_CATEGORIES.find((c) => c.value === cat)?.emoji ?? "✨";
 }
+
+// ─── Task flags (stored as tags) ───────────────────────────────────────────
+
+/** The user is working on this task right now ("Active" column). */
+export const TASK_ACTIVE_TAG = "active";
+/** The user chose to show this task on their calendar. */
+export const TASK_CALENDAR_TAG = "calendar";
+
+export const hasTag = (i: { tags?: string[] | null }, tag: string) => (i.tags ?? []).includes(tag);
+export const withTag = (tags: string[] | null | undefined, tag: string) => Array.from(new Set([...(tags ?? []), tag]));
+export const withoutTag = (tags: string[] | null | undefined, tag: string) => (tags ?? []).filter((t) => t !== tag);
+
+/** A task is Active when you marked it as in progress, or its own deadline has arrived. */
+export function isActiveTask(t: { tags?: string[] | null; due_date: string | null }) {
+  if (hasTag(t, TASK_ACTIVE_TAG)) return true;
+  if (!t.due_date) return false;
+  const due = new Date(t.due_date);
+  due.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return due.getTime() <= today.getTime();
+}
