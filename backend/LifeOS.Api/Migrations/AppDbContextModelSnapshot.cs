@@ -53,6 +53,61 @@ namespace LifeOS.Api.Migrations
                     b.ToTable("CategoryBudgets");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.ChatConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "UpdatedAt");
+
+                    b.ToTable("ChatConversations");
+                });
+
+            modelBuilder.Entity("LifeOS.Api.Models.ChatMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId", "CreatedAt");
+
+                    b.ToTable("ChatMessages");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Expense", b =>
                 {
                     b.Property<Guid>("Id")
@@ -470,6 +525,28 @@ namespace LifeOS.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.ChatConversation", b =>
+                {
+                    b.HasOne("LifeOS.Api.Models.User", "User")
+                        .WithMany("ChatConversations")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("LifeOS.Api.Models.ChatMessage", b =>
+                {
+                    b.HasOne("LifeOS.Api.Models.ChatConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Expense", b =>
                 {
                     b.HasOne("LifeOS.Api.Models.User", "User")
@@ -579,6 +656,11 @@ namespace LifeOS.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.ChatConversation", b =>
+                {
+                    b.Navigation("Messages");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Folder", b =>
                 {
                     b.Navigation("Children");
@@ -592,6 +674,8 @@ namespace LifeOS.Api.Migrations
             modelBuilder.Entity("LifeOS.Api.Models.User", b =>
                 {
                     b.Navigation("CategoryBudgets");
+
+                    b.Navigation("ChatConversations");
 
                     b.Navigation("Expenses");
 

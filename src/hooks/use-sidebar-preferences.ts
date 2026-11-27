@@ -7,7 +7,7 @@ import {
   CalendarDays,
   CheckSquare,
   Wallet,
-  Music,
+  Clapperboard,
   Archive,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -72,9 +72,9 @@ export const ALL_SIDEBAR_ITEMS: SidebarConfigItem[] = [
   },
   {
     to: "/music",
-    label: "Music",
-    description: "Built-in ambient soundscapes & music player",
-    icon: Music,
+    label: "Watch",
+    description: "Podcasts, music, documentaries & more",
+    icon: Clapperboard,
   },
   {
     to: "/pinterest",

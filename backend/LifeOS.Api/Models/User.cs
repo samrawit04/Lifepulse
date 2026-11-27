@@ -23,4 +23,5 @@ public class User
     public ICollection<PlannedPurchase> PlannedPurchases { get; set; } = [];
     public ICollection<CategoryBudget> CategoryBudgets { get; set; } = [];
     public ICollection<UserSetting> Settings { get; set; } = [];
+    public ICollection<ChatConversation> ChatConversations { get; set; } = [];
 }
