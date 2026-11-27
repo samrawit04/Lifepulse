@@ -108,6 +108,78 @@ namespace LifeOS.Api.Migrations
                     b.ToTable("ChatMessages");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.Debt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Person")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("Settled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Settled");
+
+                    b.ToTable("Debts");
+                });
+
+            modelBuilder.Entity("LifeOS.Api.Models.DebtPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DebtId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DebtId");
+
+                    b.ToTable("DebtPayments");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Expense", b =>
                 {
                     b.Property<Guid>("Id")
@@ -186,6 +258,42 @@ namespace LifeOS.Api.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Folders");
+                });
+
+            modelBuilder.Entity("LifeOS.Api.Models.Income", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ReceivedAt");
+
+                    b.ToTable("Incomes");
                 });
 
             modelBuilder.Entity("LifeOS.Api.Models.Item", b =>
@@ -547,6 +655,28 @@ namespace LifeOS.Api.Migrations
                     b.Navigation("Conversation");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.Debt", b =>
+                {
+                    b.HasOne("LifeOS.Api.Models.User", "User")
+                        .WithMany("Debts")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("LifeOS.Api.Models.DebtPayment", b =>
+                {
+                    b.HasOne("LifeOS.Api.Models.Debt", "Debt")
+                        .WithMany("Payments")
+                        .HasForeignKey("DebtId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Debt");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Expense", b =>
                 {
                     b.HasOne("LifeOS.Api.Models.User", "User")
@@ -572,6 +702,17 @@ namespace LifeOS.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("ParentFolder");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("LifeOS.Api.Models.Income", b =>
+                {
+                    b.HasOne("LifeOS.Api.Models.User", "User")
+                        .WithMany("Incomes")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("User");
                 });
@@ -661,6 +802,11 @@ namespace LifeOS.Api.Migrations
                     b.Navigation("Messages");
                 });
 
+            modelBuilder.Entity("LifeOS.Api.Models.Debt", b =>
+                {
+                    b.Navigation("Payments");
+                });
+
             modelBuilder.Entity("LifeOS.Api.Models.Folder", b =>
                 {
                     b.Navigation("Children");
@@ -677,9 +823,13 @@ namespace LifeOS.Api.Migrations
 
                     b.Navigation("ChatConversations");
 
+                    b.Navigation("Debts");
+
                     b.Navigation("Expenses");
 
                     b.Navigation("Folders");
+
+                    b.Navigation("Incomes");
 
                     b.Navigation("Items");
 
