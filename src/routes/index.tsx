@@ -96,29 +96,6 @@ const FEATURES_MARQUEE = [
   "AI weekly review", "Smart reminders", "Watch & learn", "Free books", "Voice notes", "Works on your phone",
 ];
 
-const FAQ = [
-  {
-    q: "Is LifePulse free?",
-    a: "Yes. You can create an account and use every feature for free. No credit card needed.",
-  },
-  {
-    q: "Where is my data stored?",
-    a: "In a private database tied to your account, not in your browser. Sign in on any device and everything is there.",
-  },
-  {
-    q: "What does the AI assistant know about me?",
-    a: "Only what you keep in LifePulse: your tasks, notes, events and spending. It uses that to plan your day, review your week and answer questions. It remembers your past chats so you don't have to repeat yourself.",
-  },
-  {
-    q: "Does it work on my phone?",
-    a: "Yes. Every page is built to work on small screens, from the notebook editor to the budget.",
-  },
-  {
-    q: "Can I bring my notes from somewhere else?",
-    a: "Paste them in. Headings, bold text, lists and tables keep their formatting.",
-  },
-];
-
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 function Landing() {
@@ -151,8 +128,6 @@ function Landing() {
   const nav = [
     { href: "#features", label: "Features" },
     { href: "#ai", label: "AI assistant" },
-    { href: "#how", label: "How it works" },
-    { href: "#faq", label: "FAQ" },
   ];
 
   return (
@@ -222,15 +197,8 @@ function Landing() {
       <main id="top" className="relative">
         {/* ── Hero ── */}
         <section className="mx-auto max-w-6xl px-5 pb-10 pt-32 text-center sm:px-6 sm:pt-40">
-          <Reveal>
-            <a href="#ai" className="mx-auto inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 py-1 pl-1 pr-3 text-xs font-medium text-foreground transition hover:bg-primary/15">
-              <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">New</span>
-              Your AI now reviews your week
-              <ArrowRight className="h-3 w-3" />
-            </a>
-          </Reveal>
           <Reveal delay={80}>
-            <h1 className="mx-auto mt-6 max-w-4xl font-display text-[2.6rem] font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
+            <h1 className="mx-auto max-w-4xl font-display text-[2.6rem] font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
               Your whole life,
               <br />
               <span className="lp-gradient-text">in one calm workspace.</span>
@@ -242,20 +210,6 @@ function Landing() {
               Stop switching between six apps. Start getting things done.
             </p>
           </Reveal>
-          <Reveal delay={240}>
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <PrimaryCta>Start free</PrimaryCta>
-              <a href="#features" className="inline-flex items-center gap-2 rounded-full border border-border bg-background/40 px-6 py-3 text-sm font-semibold backdrop-blur transition hover:bg-muted">
-                See what's inside
-              </a>
-            </div>
-            <p className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> Free to use</span>
-              <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> No credit card</span>
-              <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> Sign in with Google</span>
-            </p>
-          </Reveal>
-
           <Reveal delay={320} className="relative mx-auto mt-16 max-w-5xl">
             <HeroMockup />
           </Reveal>
@@ -347,25 +301,6 @@ function Landing() {
             </Bento>
           </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            {[
-              { icon: Bell, t: "Smart reminders", d: "A heads-up before tasks, events and budgets need you." },
-              { icon: Smartphone, t: "Made for your phone", d: "Every page works on small screens, not just the dashboard." },
-              { icon: Lock, t: "Private by default", d: "Your data lives in your account, never in a shared space." },
-            ].map(({ icon: Icon, t, d }, i) => (
-              <Reveal key={t} delay={i * 80}>
-                <div className="flex h-full gap-4 rounded-2xl border border-border bg-card/40 p-5">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold">{t}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">{d}</p>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
         </section>
 
         {/* ── AI spotlight ── */}
@@ -396,67 +331,6 @@ function Landing() {
           </div>
         </section>
 
-        {/* ── How it works ── */}
-        <section id="how" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-24 sm:px-6">
-          <Reveal className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">How it works</p>
-            <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-5xl">Up and running in a minute.</h2>
-          </Reveal>
-          <div className="relative mt-14 grid gap-6 md:grid-cols-3">
-            <div aria-hidden className="absolute left-0 right-0 top-7 hidden h-px bg-gradient-to-r from-transparent via-border to-transparent md:block" />
-            {[
-              { n: "1", t: "Create your account", d: "Sign up with Google or email. It's free." },
-              { n: "2", t: "Drop in your life", d: "Add tasks, paste notes, log what you spend. Everything lands in one place." },
-              { n: "3", t: "Let it work for you", d: "Get reminders, a clear dashboard every morning and a weekly review from your assistant." },
-            ].map((s, i) => (
-              <Reveal key={s.n} delay={i * 120}>
-                <div className="relative text-center">
-                  <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-primary/30 bg-background font-display text-xl font-semibold text-primary shadow-[0_0_0_6px_var(--background)]">
-                    {s.n}
-                  </div>
-                  <h3 className="mt-5 font-display text-lg font-semibold">{s.t}</h3>
-                  <p className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground">{s.d}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </section>
-
-        {/* ── FAQ ── */}
-        <section id="faq" className="mx-auto max-w-3xl scroll-mt-20 px-5 pb-24 sm:px-6">
-          <Reveal className="text-center">
-            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">Questions, answered</h2>
-          </Reveal>
-          <div className="mt-10 divide-y divide-border rounded-3xl border border-border bg-card/40">
-            {FAQ.map((f) => (
-              <details key={f.q} className="group px-5 sm:px-6">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-left text-sm font-semibold sm:text-base [&::-webkit-details-marker]:hidden">
-                  {f.q}
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="-mt-1 pb-5 text-sm leading-relaxed text-muted-foreground">{f.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        {/* ── Final CTA ── */}
-        <section className="mx-auto max-w-6xl px-5 pb-20 sm:px-6">
-          <Reveal>
-            <div className="relative overflow-hidden rounded-[2rem] border border-primary/30 bg-gradient-to-br from-primary/25 via-primary/10 to-transparent px-6 py-16 text-center sm:px-12 sm:py-20">
-              <div aria-hidden className="lp-grid absolute inset-0 opacity-60" />
-              <div aria-hidden className="lp-blob absolute -bottom-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/30 blur-[90px]" />
-              <div className="relative">
-                <h2 className="mx-auto max-w-2xl font-display text-3xl font-semibold tracking-tight sm:text-5xl">Give your days a calmer rhythm.</h2>
-                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Set up your workspace in a minute. Your future self will thank you.</p>
-                <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                  <PrimaryCta>Create your free workspace</PrimaryCta>
-                  <Link to="/auth" className="text-sm font-medium text-muted-foreground hover:text-foreground">I already have an account</Link>
-                </div>
-              </div>
-            </div>
-          </Reveal>
-        </section>
       </main>
 
       <footer className="border-t border-border/60">
@@ -468,7 +342,6 @@ function Landing() {
           </div>
           <div className="flex items-center gap-5">
             <a href="#features" className="hover:text-foreground">Features</a>
-            <a href="#faq" className="hover:text-foreground">FAQ</a>
             <Link to="/auth" className="hover:text-foreground">Sign in</Link>
           </div>
         </div>
